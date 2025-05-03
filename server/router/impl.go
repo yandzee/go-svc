@@ -1,6 +1,8 @@
 package router
 
 import (
+	"errors"
+	"fmt"
 	"iter"
 	"net/http"
 	"strings"
@@ -160,15 +162,29 @@ func (ri *RouterImpl) Extend(rhs Router) {
 }
 
 func (ri *RouterImpl) Handler() (http.Handler, error) {
-	router := httprouter.New()
-	handler := http.Handler(router)
+	root := httprouter.New()
+	handler := http.Handler(root)
 
 	for route := range ri.IterRoutes() {
 		switch {
 		case route.Handler != nil:
-			router.Handle(route.Method, route.Path, ri.makeHandle(route.Handler))
+			root.Handle(route.Method, route.Path, ri.makeHandle(route.Handler))
 		case route.FileSystem != nil:
-			router.ServeFiles(ri.makeFilesPath(route.Path), route.FileSystem)
+			root.ServeFiles(ri.makeFilesPath(route.Path), route.FileSystem)
+		}
+	}
+
+	for baseUrl, subrouter := range ri.attached {
+		subhandler, err := subrouter.Handler()
+		if err != nil {
+			return nil, errors.Join(
+				err,
+				fmt.Errorf("failed to build handler for subrouter on path '%s'", baseUrl),
+			)
+		}
+
+		for _, m := range httputils.AllMethods {
+			root.Handler(m, baseUrl, subhandler)
 		}
 	}
 
