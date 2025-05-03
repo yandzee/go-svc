@@ -3,6 +3,10 @@ package router
 import (
 	"iter"
 	"net/http"
+	"strings"
+
+	"github.com/julienschmidt/httprouter"
+	"github.com/rs/cors"
 
 	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/log"
@@ -89,31 +93,11 @@ func (ri *RouterImpl) CORS(enabled bool, maybeOpts ...CORSOptions) {
 	ri.corsOptions = opts
 }
 
-// for route := range r.Inspect() {
-// 	combinedPath, err := url.JoinPath(p, route.Path)
-// 	if err != nil {
-// 		return errors.Join(
-// 			fmt.Errorf("failed to join route paths: '%s' and '%s'", p, route.Path),
-// 			err,
-// 		)
-// 	}
-//
-// 	switch {
-// 	case route.Handler != nil:
-// 		ri.ensureHandlers(route.Method)[combinedPath] = route.Handler
-// 	case route.FileSystem != nil:
-// 		ri.ensureFiles()[combinedPath] = route.FileSystem
-// 	}
-// }
-//
-// return nil
-// }
-
 func (ri *RouterImpl) Files(p string, fsh http.FileSystem) {
 	ri.ensureFiles()[p] = fsh
 }
 
-func (ri *RouterImpl) Inspect() iter.Seq[*Route] {
+func (ri *RouterImpl) IterRoutes() iter.Seq[*Route] {
 	return func(yield func(*Route) bool) {
 		for method, pathHandlers := range ri.handlers {
 			for path, handler := range pathHandlers {
@@ -141,6 +125,114 @@ func (ri *RouterImpl) Inspect() iter.Seq[*Route] {
 			}
 		}
 	}
+}
+
+func (ri *RouterImpl) Extend(rhs Router) {
+	for route := range rhs.IterRoutes() {
+		if route.FileSystem != nil {
+			ri.Files(route.Path, route.FileSystem)
+			continue
+		}
+
+		if route.Handler == nil {
+			continue
+		}
+
+		switch route.Method {
+		case http.MethodGet:
+			ri.Get(route.Path, route.Handler)
+		case http.MethodPost:
+			ri.Post(route.Path, route.Handler)
+		case http.MethodPut:
+			ri.Put(route.Path, route.Handler)
+		case http.MethodHead:
+			ri.Head(route.Path, route.Handler)
+		case http.MethodOptions:
+			ri.Options(route.Path, route.Handler)
+		case http.MethodConnect:
+			ri.Connect(route.Path, route.Handler)
+		case http.MethodPatch:
+			ri.Patch(route.Path, route.Handler)
+		case http.MethodTrace:
+			ri.Trace(route.Path, route.Handler)
+		}
+	}
+}
+
+func (ri *RouterImpl) Handler() (http.Handler, error) {
+	router := httprouter.New()
+	handler := http.Handler(router)
+
+	for route := range ri.IterRoutes() {
+		switch {
+		case route.Handler != nil:
+			router.Handle(route.Method, route.Path, ri.makeHandle(route.Handler))
+		case route.FileSystem != nil:
+			router.ServeFiles(ri.makeFilesPath(route.Path), route.FileSystem)
+		}
+	}
+
+	if ri.corsEnabled {
+		opts := cors.Options{
+			AllowedOrigins:   ri.corsOptions.AllowedOrigins,
+			AllowCredentials: ri.corsOptions.AllowCredentials,
+			AllowedHeaders:   ri.corsOptions.AllowedHeaders,
+			AllowedMethods:   ri.corsOptions.AllowedMethods,
+			ExposedHeaders:   ri.corsOptions.ExposedHeaders,
+			Debug:            ri.corsOptions.DebugEnabled,
+			Logger:           nil,
+		}
+
+		if opts.Debug {
+			opts.Logger = &corsLogger{
+				Log: ri.corsOptions.Logger,
+			}
+		}
+
+		corsServer := cors.New(opts)
+		handler = corsServer.Handler(handler)
+	}
+
+	// 	combinedPath, err := url.JoinPath(p, route.Path)
+	// 	if err != nil {
+	// 		return errors.Join(
+	// 			fmt.Errorf("failed to join route paths: '%s' and '%s'", p, route.Path),
+	// 			err,
+	// 		)
+	// 	}
+	//
+	// 	switch {
+	// 	case route.Handler != nil:
+	// 		ri.ensureHandlers(route.Method)[combinedPath] = route.Handler
+	// 	case route.FileSystem != nil:
+	// 		ri.ensureFiles()[combinedPath] = route.FileSystem
+	// 	}
+	// }
+	//
+	// return nil
+	// }
+
+	return handler, nil
+}
+
+func (ri *RouterImpl) makeHandle(h Handler) httprouter.Handle {
+	return func(w http.ResponseWriter, req *http.Request, ps httprouter.Params) {
+		h(w, req, &HttprouterContext{
+			ps: ps,
+		})
+	}
+}
+
+func (ri *RouterImpl) makeFilesPath(p string) string {
+	if strings.HasSuffix(p, "*filepath") {
+		return p
+	}
+
+	if strings.HasSuffix(p, "/") {
+		return p + "*filepath"
+	}
+
+	return p + "/*filepath"
 }
 
 func (ri *RouterImpl) ensureHandlers(method string) map[string]Handler {

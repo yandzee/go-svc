@@ -17,12 +17,15 @@ type Router interface {
 	Patch(string, Handler)
 	Trace(string, Handler)
 
-	// Static serving
 	Files(string, http.FileSystem)
+
 	Attach(string, Router)
+	Extend(Router)
+
 	CORS(bool, ...CORSOptions)
-	Inspect() iter.Seq[*Route]
-	Finalize() (http.Handler, error)
+	Handler() (http.Handler, error)
+
+	IterRoutes() iter.Seq[*Route]
 }
 
 type Handler func(http.ResponseWriter, *http.Request, Context)
@@ -35,14 +38,13 @@ type Route struct {
 }
 
 type CORSOptions struct {
-	AllowedMethods    []string
-	DisallowedMethods []string
-
+	AllowedMethods []string
 	AllowedOrigins []string
 
-	AllowedHeaders    []string
-	DisallowedHeaders []string
-	ExposedHeaders    []string
+	AllowedHeaders []string
+	ExposedHeaders []string
+
+	AllowCredentials bool
 
 	DebugEnabled bool
 	Logger       *slog.Logger
