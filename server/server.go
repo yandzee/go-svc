@@ -7,16 +7,23 @@ import (
 	"net/url"
 
 	"github.com/rs/cors"
+	"github.com/yandzee/go-svc/server/router"
 
 	"chelnok-backend/internal/application/core"
 	"chelnok-backend/internal/config"
 	"log/slog"
 )
 
+type ProtocolKind int
+
+const (
+	HTTP2 ProtocolKind = iota
+)
+
 type Server struct {
-	Config      *config.Config
-	Log         *slog.Logger
-	Application core.Core
+	Kind    ProtocolKind
+	Router  router.Router
+	Handler http.Handler
 
 	listener ServerListener
 }
@@ -47,6 +54,15 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 }
 
 func (srv *Server) setupHandler() http.Handler {
+	var handler http.Handler
+
+	switch {
+	case srv.Handler != nil:
+		handler = srv.Handler
+	case srv.Router != nil:
+		handler = srv.prepareRouterHandler()
+	}
+
 	handler := http.Handler(srv.prepareRouter())
 
 	if srv.Config.ServerCORSEnabled {

@@ -2,6 +2,7 @@ package router
 
 import (
 	"iter"
+	"log/slog"
 	"net/http"
 )
 
@@ -18,11 +19,10 @@ type Router interface {
 
 	// Static serving
 	Files(string, http.FileSystem)
-
-	// Allows to decouple Router creating and attaching to base url
-	Attach(string, Router) error
-
+	Attach(string, Router)
+	CORS(bool, ...CORSOptions)
 	Inspect() iter.Seq[*Route]
+	Finalize() (http.Handler, error)
 }
 
 type Handler func(http.ResponseWriter, *http.Request, Context)
@@ -32,6 +32,20 @@ type Route struct {
 	Path       string
 	Handler    Handler
 	FileSystem http.FileSystem
+}
+
+type CORSOptions struct {
+	AllowedMethods    []string
+	DisallowedMethods []string
+
+	AllowedOrigins []string
+
+	AllowedHeaders    []string
+	DisallowedHeaders []string
+	ExposedHeaders    []string
+
+	DebugEnabled bool
+	Logger       *slog.Logger
 }
 
 type Context interface {
