@@ -9,8 +9,6 @@ import (
 	"github.com/rs/cors"
 	"github.com/yandzee/go-svc/server/router"
 
-	"chelnok-backend/internal/application/core"
-	"chelnok-backend/internal/config"
 	"log/slog"
 )
 
@@ -24,12 +22,16 @@ type Server struct {
 	Kind    ProtocolKind
 	Router  router.Router
 	Handler http.Handler
+	Log     *slog.Logger
 
 	listener ServerListener
 }
 
 func (srv *Server) Run(ctx context.Context) error {
-	rootHandler := srv.setupHandler()
+	rootHandler, err := srv.setupHandler()
+	if err != nil {
+		return err
+	}
 
 	server, err := srv.prepareListener(ctx, rootHandler)
 	if err != nil {
@@ -53,48 +55,18 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 	return srv.listener.Shutdown(ctx)
 }
 
-func (srv *Server) setupHandler() http.Handler {
+func (srv *Server) setupHandler() (http.Handler, error) {
 	var handler http.Handler
+	var err error
 
 	switch {
 	case srv.Handler != nil:
 		handler = srv.Handler
 	case srv.Router != nil:
-		handler = srv.prepareRouterHandler()
+		handler, err = srv.Router.Handler()
 	}
 
-	handler := http.Handler(srv.prepareRouter())
-
-	if srv.Config.ServerCORSEnabled {
-		tokenHeaders := srv.Application.Services().Auth().ExposedHTTPHeaders()
-
-		opts := cors.Options{
-			AllowedOrigins:   srv.Config.ServerCORSOrigins,
-			AllowCredentials: true,
-			AllowedHeaders:   []string{"*"},
-			AllowedMethods: []string{
-				http.MethodGet,
-				http.MethodPost,
-				http.MethodPut,
-				http.MethodDelete,
-			},
-			ExposedHeaders: tokenHeaders,
-			Debug:          false,
-			Logger:         nil,
-		}
-
-		if srv.Config.ServerCORSDebugEnabled {
-			opts.Debug = true
-			opts.Logger = &corsLogger{
-				Log: srv.Log.With("module", "cors"),
-			}
-		}
-
-		corsServer := cors.New(opts)
-		handler = corsServer.Handler(handler)
-	}
-
-	return handler
+	return handler, err
 }
 
 func (srv *Server) prefixed(p string) string {
