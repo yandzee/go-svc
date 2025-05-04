@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"iter"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/julienschmidt/httprouter"
@@ -17,7 +18,6 @@ import (
 type RouterImpl struct {
 	handlers    map[string]map[string]Handler
 	files       map[string]http.FileSystem
-	attached    map[string]Router
 	corsEnabled bool
 	corsOptions *CORSOptions
 }
@@ -58,12 +58,29 @@ func (ri *RouterImpl) Trace(p string, h Handler) {
 	ri.ensureHandlers(http.MethodTrace)[p] = h
 }
 
-func (ri *RouterImpl) Attach(p string, r Router) {
-	if ri.attached == nil {
-		ri.attached = make(map[string]Router)
+func (ri *RouterImpl) Method(method, path string, handler Handler) {
+	switch method {
+	case http.MethodGet:
+		ri.Get(path, handler)
+	case http.MethodPost:
+		ri.Post(path, handler)
+	case http.MethodPut:
+		ri.Put(path, handler)
+	case http.MethodHead:
+		ri.Head(path, handler)
+	case http.MethodDelete:
+		ri.Delete(path, handler)
+	case http.MethodOptions:
+		ri.Options(path, handler)
+	case http.MethodConnect:
+		ri.Connect(path, handler)
+	case http.MethodPatch:
+		ri.Patch(path, handler)
+	case http.MethodTrace:
+		ri.Trace(path, handler)
+	default:
+		panic(fmt.Sprintf("Router: unsupported method '%s' (path: '%s')", method, path))
 	}
-
-	ri.attached[p] = r
 }
 
 func (ri *RouterImpl) CORS(enabled bool, maybeOpts ...CORSOptions) {
@@ -81,14 +98,12 @@ func (ri *RouterImpl) CORS(enabled bool, maybeOpts ...CORSOptions) {
 		opts = &maybeOpts[0]
 	default:
 		opts = &CORSOptions{
-			AllowedMethods:    httputils.AllMethods,
-			DisallowedMethods: []string{},
-			AllowedOrigins:    []string{},
-			AllowedHeaders:    []string{"*"},
-			DisallowedHeaders: []string{},
-			ExposedHeaders:    []string{"*"},
-			DebugEnabled:      false,
-			Logger:            log.Discard(),
+			AllowedMethods: httputils.AllMethods,
+			AllowedOrigins: []string{},
+			AllowedHeaders: []string{"*"},
+			ExposedHeaders: []string{"*"},
+			DebugEnabled:   false,
+			Logger:         log.Discard(),
 		}
 	}
 
@@ -129,10 +144,28 @@ func (ri *RouterImpl) IterRoutes() iter.Seq[*Route] {
 	}
 }
 
-func (ri *RouterImpl) Extend(rhs Router) {
-	for route := range rhs.IterRoutes() {
+func (ri *RouterImpl) Extend(routes iter.Seq[*Route], prefix ...string) error {
+	for route := range routes {
+		path := route.Path
+
+		if len(prefix) > 0 {
+			_path, err := url.JoinPath(prefix[0], route.Path)
+			if err != nil {
+				return errors.Join(
+					fmt.Errorf(
+						"failed to join route paths: '%s' and '%s'",
+						prefix[0],
+						route.Path,
+					),
+					err,
+				)
+			}
+
+			path = _path
+		}
+
 		if route.FileSystem != nil {
-			ri.Files(route.Path, route.FileSystem)
+			ri.Files(path, route.FileSystem)
 			continue
 		}
 
@@ -140,25 +173,10 @@ func (ri *RouterImpl) Extend(rhs Router) {
 			continue
 		}
 
-		switch route.Method {
-		case http.MethodGet:
-			ri.Get(route.Path, route.Handler)
-		case http.MethodPost:
-			ri.Post(route.Path, route.Handler)
-		case http.MethodPut:
-			ri.Put(route.Path, route.Handler)
-		case http.MethodHead:
-			ri.Head(route.Path, route.Handler)
-		case http.MethodOptions:
-			ri.Options(route.Path, route.Handler)
-		case http.MethodConnect:
-			ri.Connect(route.Path, route.Handler)
-		case http.MethodPatch:
-			ri.Patch(route.Path, route.Handler)
-		case http.MethodTrace:
-			ri.Trace(route.Path, route.Handler)
-		}
+		ri.Method(route.Method, path, route.Handler)
 	}
+
+	return nil
 }
 
 func (ri *RouterImpl) Handler() (http.Handler, error) {
@@ -171,20 +189,6 @@ func (ri *RouterImpl) Handler() (http.Handler, error) {
 			root.Handle(route.Method, route.Path, ri.makeHandle(route.Handler))
 		case route.FileSystem != nil:
 			root.ServeFiles(ri.makeFilesPath(route.Path), route.FileSystem)
-		}
-	}
-
-	for baseUrl, subrouter := range ri.attached {
-		subhandler, err := subrouter.Handler()
-		if err != nil {
-			return nil, errors.Join(
-				err,
-				fmt.Errorf("failed to build handler for subrouter on path '%s'", baseUrl),
-			)
-		}
-
-		for _, m := range httputils.AllMethods {
-			root.Handler(m, baseUrl, subhandler)
 		}
 	}
 
@@ -208,25 +212,6 @@ func (ri *RouterImpl) Handler() (http.Handler, error) {
 		corsServer := cors.New(opts)
 		handler = corsServer.Handler(handler)
 	}
-
-	// 	combinedPath, err := url.JoinPath(p, route.Path)
-	// 	if err != nil {
-	// 		return errors.Join(
-	// 			fmt.Errorf("failed to join route paths: '%s' and '%s'", p, route.Path),
-	// 			err,
-	// 		)
-	// 	}
-	//
-	// 	switch {
-	// 	case route.Handler != nil:
-	// 		ri.ensureHandlers(route.Method)[combinedPath] = route.Handler
-	// 	case route.FileSystem != nil:
-	// 		ri.ensureFiles()[combinedPath] = route.FileSystem
-	// 	}
-	// }
-	//
-	// return nil
-	// }
 
 	return handler, nil
 }

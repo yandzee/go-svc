@@ -7,6 +7,8 @@ import (
 )
 
 type Router interface {
+	Method(string, string, Handler)
+
 	Get(string, Handler)
 	Post(string, Handler)
 	Put(string, Handler)
@@ -19,8 +21,8 @@ type Router interface {
 
 	Files(string, http.FileSystem)
 
-	Attach(string, Router)
-	Extend(Router)
+	// Second param is optional: prefix for routes to add
+	Extend(iter.Seq[*Route], ...string) error
 
 	CORS(bool, ...CORSOptions)
 	Handler() (http.Handler, error)
