@@ -4,9 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"net/url"
 
-	"github.com/rs/cors"
 	"github.com/yandzee/go-svc/server/router"
 
 	"log/slog"
@@ -19,10 +17,12 @@ const (
 )
 
 type Server struct {
+	Addr    string
 	Kind    ProtocolKind
 	Router  router.Router
 	Handler http.Handler
 	Log     *slog.Logger
+	SetupFn func(*http.Server)
 
 	listener ServerListener
 }
@@ -38,7 +38,7 @@ func (srv *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	srv.Log.Info("running listener", "port", srv.Config.ServerPort, "kind", server.Kind())
+	srv.Log.Info("running listener", "addr", srv.Addr, "kind", srv.Kind)
 	srv.listener = server
 
 	err = server.Serve()
@@ -67,13 +67,4 @@ func (srv *Server) setupHandler() (http.Handler, error) {
 	}
 
 	return handler, err
-}
-
-func (srv *Server) prefixed(p string) string {
-	str, err := url.JoinPath(srv.Config.ServerAPIPrefix, p)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return str
 }
