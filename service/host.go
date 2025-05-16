@@ -23,12 +23,20 @@ type Host struct {
 }
 
 func (h *Host) Prepare() error {
+	if h.Instance == nil {
+		return fmt.Errorf("service.Host: Instance field must be set")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 
 	h.ctx = ctx
 	h.cancel = cancel
 
 	if err := h.setupSignalHandlers(); err != nil {
+		return err
+	}
+
+	if err := h.Instance.Prepare(ctx); err != nil {
 		return err
 	}
 
