@@ -74,9 +74,20 @@ func (jdr *JSONDecodeResult) Err() error {
 	return fmt.Errorf("%s", msg)
 }
 
-func (j *Jsoner) EncodeResponse(w http.ResponseWriter, d any) error {
+func (j *Jsoner) EncodeResponse(
+	w http.ResponseWriter,
+	d any,
+	isManualErrHandling ...bool,
+) error {
 	w.Header().Set("Content-Type", "application/json")
-	return json.NewEncoder(w).Encode(d)
+	err := json.NewEncoder(w).Encode(d)
+
+	if err != nil && (len(isManualErrHandling) == 0 || !isManualErrHandling[0]) {
+		http.Error(w, "EncodeResponse: "+err.Error(), http.StatusInternalServerError)
+		return err
+	}
+
+	return err
 }
 
 func (j *Jsoner) DecodeRequest(

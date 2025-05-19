@@ -33,15 +33,15 @@ func (srv *Server) Run(ctx context.Context) error {
 		return err
 	}
 
-	server, err := srv.prepareListener(ctx, rootHandler)
+	listener, err := srv.prepareListener(ctx, rootHandler)
 	if err != nil {
 		return err
 	}
 
-	srv.Log.Info("running listener", "addr", srv.Addr, "kind", srv.Kind)
-	srv.listener = server
+	srv.Log.Info("running listener", "addr", srv.Addr, "kind", srv.Kind.String())
+	srv.listener = listener
 
-	err = server.Serve()
+	err = listener.Serve()
 
 	if errors.Is(err, http.ErrServerClosed) {
 		srv.Log.Debug("Serve terminates with ErrServerClosed")
@@ -67,4 +67,13 @@ func (srv *Server) setupHandler() (http.Handler, error) {
 	}
 
 	return handler, err
+}
+
+func (pk ProtocolKind) String() string {
+	switch pk {
+	case HTTP2:
+		return "HTTP2"
+	default:
+		return "Unknown"
+	}
 }

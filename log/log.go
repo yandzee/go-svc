@@ -19,3 +19,11 @@ func Strings[T any](key string, values []T) slog.Attr {
 
 	return slog.Any(key, arr)
 }
+
+func Error(key string, err error) slog.Attr {
+	if err == nil {
+		return slog.Any(key, nil)
+	}
+
+	return slog.String(key, err.Error())
+}

@@ -22,12 +22,12 @@ type Host struct {
 	wg     sync.WaitGroup
 }
 
-func (h *Host) Prepare() error {
+func (h *Host) Prepare(_ctx context.Context) error {
 	if h.Instance == nil {
 		return fmt.Errorf("service.Host: Instance field must be set")
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(_ctx)
 
 	h.ctx = ctx
 	h.cancel = cancel
@@ -46,6 +46,10 @@ func (h *Host) Prepare() error {
 func (h *Host) Run() error {
 	if h.Instance == nil {
 		return fmt.Errorf("nothing to run")
+	}
+
+	if h.ctx == nil {
+		return fmt.Errorf("host.Prepare() must be called first")
 	}
 
 	err := h.Instance.Run(h.ctx)

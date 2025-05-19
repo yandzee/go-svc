@@ -10,12 +10,11 @@ type Http2Listener struct {
 }
 
 func (h2l *Http2Listener) Serve() error {
-	switch {
-	case h2l.inner.TLSConfig == nil:
+	if h2l.inner.TLSConfig == nil {
 		return h2l.inner.ListenAndServe()
-	default:
-		return h2l.inner.ListenAndServeTLS("", "")
 	}
+
+	return h2l.inner.ListenAndServeTLS("", "")
 }
 
 func (h2l *Http2Listener) Kind() string {

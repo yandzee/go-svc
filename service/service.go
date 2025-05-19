@@ -12,6 +12,22 @@ type ControllableInstance interface {
 	Shutdown(context.Context) error
 }
 
+func PrepareAndRun(ctx context.Context, instance ControllableInstance) {
+	host := &Host{
+		Instance: instance,
+	}
+
+	if err := host.Prepare(ctx); err != nil {
+		ExitOnError(err, 1)
+	}
+
+	if err := host.Run(); err != nil {
+		ExitOnError(err, 2)
+	}
+
+	ExitOnError(nil, 0)
+}
+
 func ExitOnError(err error, errCode ...int) {
 	exitCode := 0
 	if len(errCode) > 0 {
