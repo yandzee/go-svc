@@ -20,6 +20,7 @@ type Router interface {
 	Trace(string, Handler)
 
 	Files(string, http.FileSystem)
+	NotFound(Handler)
 
 	// Second param is optional: prefix for routes to add
 	Extend(iter.Seq[*Route], ...string) error
@@ -33,10 +34,11 @@ type Router interface {
 type Handler func(http.ResponseWriter, *http.Request, Context)
 
 type Route struct {
-	Method     string
-	Path       string
-	Handler    Handler
-	FileSystem http.FileSystem
+	Method          string
+	Path            string
+	Handler         Handler
+	FileSystem      http.FileSystem
+	NotFoundHandler Handler
 }
 
 type CORSOptions struct {

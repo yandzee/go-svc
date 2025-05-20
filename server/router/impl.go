@@ -16,10 +16,11 @@ import (
 )
 
 type RouterImpl struct {
-	handlers    map[string]map[string]Handler
-	files       map[string]http.FileSystem
-	corsEnabled bool
-	corsOptions *CORSOptions
+	handlers        map[string]map[string]Handler
+	files           map[string]http.FileSystem
+	corsEnabled     bool
+	corsOptions     *CORSOptions
+	notFoundHandler Handler
 }
 
 func (ri *RouterImpl) Get(p string, h Handler) {
@@ -114,6 +115,10 @@ func (ri *RouterImpl) Files(p string, fsh http.FileSystem) {
 	ri.ensureFiles()[p] = fsh
 }
 
+func (ri *RouterImpl) NotFound(nfh Handler) {
+	ri.notFoundHandler = nfh
+}
+
 func (ri *RouterImpl) IterRoutes() iter.Seq[*Route] {
 	return func(yield func(*Route) bool) {
 		for method, pathHandlers := range ri.handlers {
@@ -141,11 +146,26 @@ func (ri *RouterImpl) IterRoutes() iter.Seq[*Route] {
 				return
 			}
 		}
+
+		if ri.notFoundHandler != nil {
+			r := Route{
+				NotFoundHandler: ri.notFoundHandler,
+			}
+
+			if !yield(&r) {
+				return
+			}
+		}
 	}
 }
 
 func (ri *RouterImpl) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	for route := range routes {
+		if route.NotFoundHandler != nil {
+			ri.NotFound(route.NotFoundHandler)
+			continue
+		}
+
 		path := route.Path
 
 		if len(prefix) > 0 {
@@ -189,6 +209,8 @@ func (ri *RouterImpl) Handler() (http.Handler, error) {
 			root.Handle(route.Method, route.Path, ri.makeHandle(route.Handler))
 		case route.FileSystem != nil:
 			root.ServeFiles(ri.makeFilesPath(route.Path), route.FileSystem)
+		case route.NotFoundHandler != nil:
+			root.NotFound = ri.makeHandler(route.NotFoundHandler)
 		}
 	}
 
@@ -222,6 +244,16 @@ func (ri *RouterImpl) makeHandle(h Handler) httprouter.Handle {
 			ps: ps,
 		})
 	}
+}
+
+func (ri *RouterImpl) makeHandler(h Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		params := httprouter.ParamsFromContext(req.Context())
+
+		h(w, req, &HttprouterContext{
+			ps: params,
+		})
+	})
 }
 
 func (ri *RouterImpl) makeFilesPath(p string) string {
