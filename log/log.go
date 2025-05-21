@@ -10,6 +10,14 @@ func Discard() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{}))
 }
 
+func OrDiscard(l *slog.Logger) *slog.Logger {
+	if l != nil {
+		return l
+	}
+
+	return Discard()
+}
+
 func Strings[T any](key string, values []T) slog.Attr {
 	arr := make([]any, 0, len(values))
 
