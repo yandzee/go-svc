@@ -119,17 +119,21 @@ func (ds *DirScanner) Stop() error {
 }
 
 func (ds *DirScanner) readDir(rootPath string) ([]ScannedEntry, error) {
+	return Scan(rootPath)
+}
+
+func Scan(p string) ([]ScannedEntry, error) {
 	scanned := []ScannedEntry{}
 
-	err := filepath.WalkDir(rootPath, func(fpath string, e fs.DirEntry, err error) error {
-		relPath, _ := filepath.Rel(rootPath, fpath)
-		dirPath := filepath.Join("/", filepath.Base(rootPath), relPath)
+	err := filepath.WalkDir(p, func(fpath string, e fs.DirEntry, err error) error {
+		relPath, _ := filepath.Rel(p, fpath)
+		dirPath := filepath.Join("/", filepath.Base(p), relPath)
 
 		scanned = append(scanned, ScannedEntry{
 			JoinedPath:   fpath,
 			RelativePath: relPath,
 			DirPath:      dirPath,
-			RootPath:     rootPath,
+			RootPath:     p,
 			Name:         e.Name(),
 			Entry:        e,
 			Err:          err,
@@ -161,28 +165,31 @@ func (ds *DirScanner) setupWatcher() error {
 
 func (ds *DirScanner) listenWatcher() {
 	logger := log.OrDiscard(ds.Log)
+	defer logger.Debug("listenWatcher: terminated")
 
 	for {
 		select {
 		case evt, ok := <-ds.fsw.Events:
 			if !ok {
-				logger.Debug("listenWatcher: end of events")
 				return
 			}
 
 			logger.Debug("listenWatcher: event", "event", evt)
+
+			ds.mx.Lock()
+			for k := range ds.lastRead {
+				delete(ds.lastRead, k)
+			}
+
+			ds.mx.Unlock()
 		case err, ok := <-ds.fsw.Errors:
 			if !ok {
-				logger.Debug("listenWatcher: end of errors")
 				return
 			}
 
 			logger.Debug("listenWatcher: error", log.Error("err", err))
 		case <-ds.stop:
-			logger.Debug("listenWatcher: stop")
 			return
 		}
 	}
 }
-
-// func (ds *DirScanner)
