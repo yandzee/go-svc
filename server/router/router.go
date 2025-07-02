@@ -58,6 +58,10 @@ type Context interface {
 	Param(string) (string, bool)
 }
 
+var NotFoundHandler = Handler(func(w http.ResponseWriter, _ *http.Request, _ Context) {
+	http.Error(w, "", http.StatusNotFound)
+})
+
 func New() Router {
 	return &RouterImpl{}
 }

@@ -8,6 +8,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/rs/zerolog v1.34.0
 	github.com/samber/slog-zerolog/v2 v2.7.3
+	github.com/yandzee/gotx v0.0.2
 )
 
 require (
