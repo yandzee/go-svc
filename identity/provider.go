@@ -2,35 +2,42 @@ package identity
 
 import (
 	"context"
+	"crypto/ecdsa"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
+	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/yandzee/go-svc/crypto"
-	"github.com/yandzee/gotx"
+	"github.com/yandzee/go-svc/log"
 )
 
 type RegistryProvider[U any] struct {
-	Log *slog.Logger
-	// Txer     *gotx.AnyTransactor
+	Log      *slog.Logger
 	Registry UsersRegistry[U]
+
+	BaseClaims           jwt.RegisteredClaims
+	TokenPrivateKey      *ecdsa.PrivateKey
+	AccessTokenDuration  time.Duration
+	RefreshTokenDuration time.Duration
 }
 
 type UsersRegistry[U any] interface {
-	CreateUser(context.Context, &UserStub) (U, error)
+	CreateUser(context.Context, *UserStub) (U, error)
 }
 
-func (p *RegistryProvider) Signin(ctx context.Context, r *SigninRequest) (*SigninResult, error) {
+func (p *RegistryProvider[U]) Signin(ctx context.Context, r *SigninRequest) (*SigninResult, error) {
 	return nil, nil
 }
 
-func (p *RegistryProvider) Signup(
+func (p *RegistryProvider[U]) Signup(
 	ctx context.Context,
 	req *SignupRequest,
-) (*SignupResult, error) {
+) (*SignupResult[U], error) {
 	if req == nil {
 		return nil, errors.New("Cannot signup using nil request")
 	}
@@ -43,14 +50,8 @@ func (p *RegistryProvider) Signup(
 		return nil, errors.New("Cannot signup using invalid credentials")
 	}
 
-	// tx, err := p.Txer.Context(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
 	userId, err := uuid.NewV7()
 	if err != nil {
-		// return nil, errors.Join(err, tx.Rollback(ctx))
 		return nil, err
 	}
 
@@ -63,29 +64,98 @@ func (p *RegistryProvider) Signup(
 		PasswordHash: pwdHash,
 	}
 
-	err = p.Registry.CreateUser(ctx, &stub)
+	user, err := p.Registry.CreateUser(ctx, &stub)
 	if err != nil {
 		return nil, err
 	}
 
-	tokenPair, err := svc.createSignedTokenPair(&existing.Id)
+	tokenPair, err := p.createSignedTokenPair(&userId)
 	if err != nil {
-		svc.Log.Error("issueJWTString failure", "err", err.Error())
+		p.log().Error("issueJWTString failure", "err", err.Error())
 		return nil, err
 	}
 
-	return &auth.SignupResult{
-		User:            existing,
-		Tokens:          tokenPair.AsStringPair(),
-		IsUsernameTaken: false,
-	}, tx.Commit(ctx)
+	return &SignupResult[U]{
+		User:   user,
+		Tokens: tokenPair,
+	}, nil
 }
 
-func (p *RegistryProvider) salt(smth string) (string, string) {
+func (p *RegistryProvider[U]) createSignedTokenPair(userId *uuid.UUID) (TokenPair, error) {
+	var pair TokenPair
+	var err error
+
+	pair.AccessToken, err = p.createSignedToken(userId, "at", p.AccessTokenDuration)
+	if err != nil {
+		return pair, err
+	}
+
+	pair.RefreshToken, err = p.createSignedToken(userId, "rt", p.RefreshTokenDuration)
+	if err != nil {
+		return pair, err
+	}
+
+	return pair, err
+}
+
+func (p *RegistryProvider[U]) createSignedToken(
+	userId *uuid.UUID,
+	idPrefix string,
+	dur time.Duration,
+) (*Token, error) {
+	if p.TokenPrivateKey == nil {
+		return nil, errors.New("cannot create signed token: private key is nil")
+	}
+
+	if userId == nil {
+		return nil, errors.New("cannot create signed token: userId is nil")
+	}
+
+	now := time.Now()
+	uid := userId.String()
+
+	claims := p.mergeClaims(jwt.RegisteredClaims{
+		Subject:   uid,
+		ExpiresAt: jwt.NewNumericDate(now.Add(dur)),
+		IssuedAt:  jwt.NewNumericDate(now),
+		ID:        fmt.Sprintf("%s-%s-%d", idPrefix, uid, now.UnixNano()),
+	})
+
+	token := jwt.NewWithClaims(jwt.SigningMethodES256, claims)
+
+	signedTokenStr, err := token.SignedString(p.TokenPrivateKey)
+	if err != nil {
+		return nil, errors.Join(
+			fmt.Errorf("Failed to create signed token string"),
+			err,
+		)
+	}
+
+	return &Token{
+		JWT:       token,
+		JWTString: signedTokenStr,
+	}, nil
+}
+
+func (p *RegistryProvider[U]) mergeClaims(filler jwt.RegisteredClaims) jwt.RegisteredClaims {
+	if len(filler.Issuer) == 0 {
+		filler.Issuer = p.BaseClaims.Issuer
+	}
+
+	filler.Audience = append(filler.Audience, p.BaseClaims.Audience...)
+
+	return filler
+}
+
+func (p *RegistryProvider[U]) salt(smth string) (string, string) {
 	salt := crypto.RandomSha256(32)
 
 	h := sha256.New()
 	fmt.Fprintf(h, "%s.%s", salt, smth)
 
 	return salt, hex.EncodeToString(h.Sum(nil))
+}
+
+func (p *RegistryProvider[U]) log() *slog.Logger {
+	return log.OrDiscard(p.Log)
 }

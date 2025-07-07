@@ -52,6 +52,7 @@ func (req *SignupRequest) IsValid() (string, bool) {
 	return "", true
 }
 
-type SignupResult struct {
-	IsUsernameTaken bool
+type SignupResult[U any] struct {
+	User   U
+	Tokens TokenPair
 }
