@@ -16,7 +16,7 @@ import (
 	"github.com/yandzee/go-svc/log"
 )
 
-type RegistryProvider[U any] struct {
+type RegistryProvider[U User] struct {
 	Log      *slog.Logger
 	Registry UsersRegistry[U]
 
@@ -26,24 +26,74 @@ type RegistryProvider[U any] struct {
 	RefreshTokenDuration time.Duration
 }
 
-type UsersRegistry[U any] interface {
+type UsersRegistry[U User] interface {
 	CreateUser(context.Context, *UserStub) (CreateUserResult[U], error)
+	GetUserByUsername(context.Context, string) (*U, error)
+	UserHasCredentials(context.Context, *U, *PlainCredentials) (CredsCheckResult, error)
 }
 
-type CreateUserResult[U any] struct {
+type CreateUserResult[U User] struct {
 	AlreadyExists bool
 	User          *U
 }
 
-func (p *RegistryProvider[U]) Signin(ctx context.Context, r *SigninRequest) (*SigninResult, error) {
-	return nil, nil
+type CredsCheckResult struct {
+	IsWrongPassword bool
+}
+
+func (p *RegistryProvider[U]) SignIn(
+	ctx context.Context,
+	creds *PlainCredentials,
+) (*SigninResult[U], error) {
+	if creds == nil {
+		return nil, errors.New("cannot signin using nil credentials")
+	}
+
+	if _, ok := creds.IsValid(); !ok {
+		return nil, errors.New("cannot signin using invalid credentials")
+	}
+
+	usr, err := p.Registry.GetUserByUsername(ctx, creds.Username)
+	if err != nil {
+		return nil, err
+	}
+
+	if usr == nil {
+		return &SigninResult[U]{
+			UserNotFound: true,
+		}, nil
+	}
+
+	authCheck, err := p.Registry.UserHasCredentials(ctx, usr, creds)
+	if err != nil {
+		return nil, err
+	}
+
+	if authCheck.IsWrongPassword {
+		return &SigninResult[U]{
+			NotAuthorized: true,
+		}, nil
+	}
+
+	uid := (*usr).GetId()
+
+	tokenPair, err := p.createSignedTokenPair(&uid)
+	if err != nil {
+		p.log().Error("createSignedTokenPair failure", "err", err.Error())
+		return nil, err
+	}
+
+	return &SigninResult[U]{
+		User:   usr,
+		Tokens: tokenPair,
+	}, nil
 }
 
 func (p *RegistryProvider[U]) SignUp(
 	ctx context.Context,
-	req *SignupRequest,
+	creds *PlainCredentials,
 ) (*SignupResult[U], error) {
-	if req == nil {
+	if creds == nil {
 		return nil, errors.New("cannot signup using nil request")
 	}
 
@@ -51,7 +101,7 @@ func (p *RegistryProvider[U]) SignUp(
 		return nil, errors.New("cannot signup using nil UsersRegistry")
 	}
 
-	if _, ok := req.IsValid(); !ok {
+	if _, ok := creds.IsValid(); !ok {
 		return nil, errors.New("cannot signup using invalid credentials")
 	}
 
@@ -60,12 +110,12 @@ func (p *RegistryProvider[U]) SignUp(
 		return nil, err
 	}
 
-	salt, pwdHash := p.salt(req.Password)
+	salt, pwdHash := p.salt(creds.Password)
 	stub := UserStub{
 		Id:           userId,
-		Username:     req.Username,
+		Username:     creds.Username,
 		Salt:         salt,
-		Password:     req.Password,
+		Password:     creds.Password,
 		PasswordHash: pwdHash,
 	}
 
