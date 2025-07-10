@@ -4,6 +4,8 @@ import (
 	"iter"
 	"log/slog"
 	"net/http"
+
+	"github.com/yandzee/go-svc/httputils"
 )
 
 type Router interface {
@@ -56,6 +58,7 @@ type CORSOptions struct {
 
 type Context interface {
 	Param(string) (string, bool)
+	Jsoner() *httputils.Jsoner
 }
 
 var NotFoundHandler = Handler(func(w http.ResponseWriter, _ *http.Request, _ Context) {

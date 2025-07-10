@@ -2,9 +2,9 @@ package identity
 
 import "context"
 
-type Provider interface {
-	SignIn(context.Context, *SigninRequest) (*SigninResponse, error)
-	SignUp(context.Context, *SignupRequest) (*SignupResponse, error)
+type Provider[User any] interface {
+	// SignIn(context.Context, *SigninRequest) (*SigninResult, error)
+	SignUp(context.Context, *SignupRequest) (*SignupResult[User], error)
 }
 
 type SigninRequest struct {

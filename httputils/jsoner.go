@@ -12,6 +12,10 @@ import (
 const MaxSizeDefault int = 1024 * 1024 // 1 MB
 
 type Jsoner struct {
+	DefaultDecodeOptions JSONDecodeOptions
+}
+
+type JSONDecodeOptions struct {
 	MaxSize              int
 	UnknownFieldsAllowed bool
 }
@@ -94,6 +98,7 @@ func (j *Jsoner) DecodeRequest(
 	w http.ResponseWriter,
 	r *http.Request,
 	dst any,
+	opts ...JSONDecodeOptions,
 ) *JSONDecodeResult {
 	result := &JSONDecodeResult{}
 
@@ -107,8 +112,13 @@ func (j *Jsoner) DecodeRequest(
 		}
 	}
 
-	if j.MaxSize >= 0 {
-		maxSize := j.MaxSize
+	opt := j.DefaultDecodeOptions
+	if len(opts) > 0 {
+		opt = opts[0]
+	}
+
+	if opt.MaxSize >= 0 {
+		maxSize := opt.MaxSize
 		if maxSize == 0 {
 			maxSize = MaxSizeDefault
 		}
@@ -118,7 +128,7 @@ func (j *Jsoner) DecodeRequest(
 
 	dec := json.NewDecoder(r.Body)
 
-	if !j.UnknownFieldsAllowed {
+	if !opt.UnknownFieldsAllowed {
 		dec.DisallowUnknownFields()
 	}
 

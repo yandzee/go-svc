@@ -27,27 +27,32 @@ type RegistryProvider[U any] struct {
 }
 
 type UsersRegistry[U any] interface {
-	CreateUser(context.Context, *UserStub) (U, error)
+	CreateUser(context.Context, *UserStub) (CreateUserResult[U], error)
+}
+
+type CreateUserResult[U any] struct {
+	AlreadyExists bool
+	User          *U
 }
 
 func (p *RegistryProvider[U]) Signin(ctx context.Context, r *SigninRequest) (*SigninResult, error) {
 	return nil, nil
 }
 
-func (p *RegistryProvider[U]) Signup(
+func (p *RegistryProvider[U]) SignUp(
 	ctx context.Context,
 	req *SignupRequest,
 ) (*SignupResult[U], error) {
 	if req == nil {
-		return nil, errors.New("Cannot signup using nil request")
+		return nil, errors.New("cannot signup using nil request")
 	}
 
 	if p.Registry == nil {
-		return nil, errors.New("Cannot signup using nil UsersRegistry")
+		return nil, errors.New("cannot signup using nil UsersRegistry")
 	}
 
 	if _, ok := req.IsValid(); !ok {
-		return nil, errors.New("Cannot signup using invalid credentials")
+		return nil, errors.New("cannot signup using invalid credentials")
 	}
 
 	userId, err := uuid.NewV7()
@@ -64,9 +69,15 @@ func (p *RegistryProvider[U]) Signup(
 		PasswordHash: pwdHash,
 	}
 
-	user, err := p.Registry.CreateUser(ctx, &stub)
+	createResult, err := p.Registry.CreateUser(ctx, &stub)
 	if err != nil {
 		return nil, err
+	}
+
+	if createResult.AlreadyExists {
+		return &SignupResult[U]{
+			AlreadyExists: true,
+		}, nil
 	}
 
 	tokenPair, err := p.createSignedTokenPair(&userId)
@@ -76,8 +87,9 @@ func (p *RegistryProvider[U]) Signup(
 	}
 
 	return &SignupResult[U]{
-		User:   user,
-		Tokens: tokenPair,
+		User:          createResult.User,
+		Tokens:        tokenPair,
+		AlreadyExists: false,
 	}, nil
 }
 
@@ -126,7 +138,7 @@ func (p *RegistryProvider[U]) createSignedToken(
 	signedTokenStr, err := token.SignedString(p.TokenPrivateKey)
 	if err != nil {
 		return nil, errors.Join(
-			fmt.Errorf("Failed to create signed token string"),
+			fmt.Errorf("failed to create signed token string"),
 			err,
 		)
 	}
@@ -151,7 +163,7 @@ func (p *RegistryProvider[U]) salt(smth string) (string, string) {
 	salt := crypto.RandomSha256(32)
 
 	h := sha256.New()
-	fmt.Fprintf(h, "%s.%s", salt, smth)
+	_, _ = fmt.Fprintf(h, "%s.%s", salt, smth)
 
 	return salt, hex.EncodeToString(h.Sum(nil))
 }

@@ -53,6 +53,7 @@ func (req *SignupRequest) IsValid() (string, bool) {
 }
 
 type SignupResult[U any] struct {
-	User   U
-	Tokens TokenPair
+	User          *U
+	AlreadyExists bool
+	Tokens        TokenPair
 }
