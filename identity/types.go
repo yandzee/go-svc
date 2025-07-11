@@ -45,16 +45,29 @@ func (req *PlainCredentials) IsValid() (string, bool) {
 }
 
 type SignupResult[U User] struct {
-	User          *U
-	AlreadyExists bool
-	Tokens        TokenPair
+	User          *U        `json:"user"`
+	AlreadyExists bool      `json:"alreadyExists"`
+	Tokens        TokenPair `json:"tokens"`
+}
+
+type PlainSignupResult[U any] struct {
+	User          *U              `json:"user"`
+	AlreadyExists bool            `json:"alreadyExists"`
+	Tokens        StringTokenPair `json:"tokens"`
 }
 
 type SigninResult[U User] struct {
-	User          *U
-	UserNotFound  bool
-	NotAuthorized bool
-	Tokens        TokenPair
+	User          *U        `json:"user"`
+	UserNotFound  bool      `json:"userNotFound"`
+	NotAuthorized bool      `json:"notAuthorized"`
+	Tokens        TokenPair `json:"tokens"`
+}
+
+type PlainSigninResult[U User] struct {
+	User          *U              `json:"user"`
+	UserNotFound  bool            `json:"userNotFound"`
+	NotAuthorized bool            `json:"notAuthorized"`
+	Tokens        StringTokenPair `json:"tokens"`
 }
 
 type UserStub struct {
@@ -63,4 +76,21 @@ type UserStub struct {
 	Password     string
 	Salt         string
 	PasswordHash string
+}
+
+func (r *SignupResult[U]) AsPlain() PlainSignupResult[U] {
+	return PlainSignupResult[U]{
+		User:          r.User,
+		AlreadyExists: r.AlreadyExists,
+		Tokens:        r.Tokens.AsStringPair(),
+	}
+}
+
+func (r *SigninResult[U]) AsPlain() PlainSigninResult[U] {
+	return PlainSigninResult[U]{
+		User:          r.User,
+		UserNotFound:  r.UserNotFound,
+		NotAuthorized: r.NotAuthorized,
+		Tokens:        r.Tokens.AsStringPair(),
+	}
 }

@@ -3,8 +3,8 @@ package identity
 import "github.com/yandzee/gou/boolean"
 
 type TokenPair struct {
-	AccessToken  *Token
-	RefreshToken *Token
+	AccessToken  *Token `json:"accessToken"`
+	RefreshToken *Token `json:"refreshToken"`
 }
 
 type StringTokenPair struct {

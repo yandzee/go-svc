@@ -48,7 +48,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			return
 		}
 
-		_ = jsoner.EncodeResponse(w, signupResult)
+		_ = jsoner.EncodeResponse(w, signupResult.AsPlain())
 	}
 }
 
@@ -80,7 +80,7 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			return
 		}
 
-		_ = jsoner.EncodeResponse(w, signinResult)
+		_ = jsoner.EncodeResponse(w, signinResult.AsPlain())
 
 		if signinResult.NotAuthorized {
 			w.WriteHeader(http.StatusUnauthorized)
