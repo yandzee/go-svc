@@ -65,6 +65,13 @@ var NotFoundHandler = Handler(func(w http.ResponseWriter, _ *http.Request, _ Con
 	http.Error(w, "", http.StatusNotFound)
 })
 
+var LoggedNotFound = func(log *slog.Logger) Handler {
+	return func(w http.ResponseWriter, r *http.Request, _ Context) {
+		log.Warn("resource is not found", "route", r.URL.Path)
+		http.Error(w, "", http.StatusNotFound)
+	}
+}
+
 func New() Router {
 	return &RouterImpl{}
 }

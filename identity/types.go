@@ -71,11 +71,11 @@ type PlainSigninResult[U User] struct {
 }
 
 type UserStub struct {
-	Id           uuid.UUID
-	Username     string
-	Password     string
-	Salt         string
-	PasswordHash string
+	Id           uuid.UUID `json:"id"`
+	Username     string    `json:"username"`
+	Password     string    `json:"-"`
+	Salt         string    `json:"-"`
+	PasswordHash string    `json:"-"`
 }
 
 func (r *SignupResult[U]) AsPlain() PlainSignupResult[U] {
