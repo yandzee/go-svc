@@ -1,22 +1,69 @@
 package http
 
 import (
+	"crypto/ecdsa"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/yandzee/go-svc/identity"
+	"github.com/yandzee/go-svc/jwtutils"
 	"github.com/yandzee/go-svc/log"
 	"github.com/yandzee/go-svc/server/router"
 )
 
+const (
+	AccessTokenHeader  = "X-Access-Token"
+	RefreshTokenHeader = "X-Refresh-Token"
+)
+
 type IdentityEndpoint[U identity.User] struct {
-	Provider identity.Provider[U]
-	Log      *slog.Logger
+	Provider           identity.Provider[U]
+	Log                *slog.Logger
+	AccessTokenHeader  string
+	RefreshTokenHeader string
+	TokenPrivateKey    *ecdsa.PrivateKey
 }
 
 func Wrap[U identity.User](id identity.Provider[U]) *IdentityEndpoint[U] {
 	return &IdentityEndpoint[U]{
 		Provider: id,
+	}
+}
+
+func (ep *IdentityEndpoint[U]) Check() router.Handler {
+	log := ep.log()
+
+	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
+		pair, err := ep.tokensFromRequest(r)
+		if err != nil {
+			log.Error("tokensFromRequest failure", "err", err.Error())
+			http.Error(
+				w,
+				"Auth check has failed: "+err.Error(),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		switch {
+		case pair.AccessToken == nil:
+			http.Error(w, "Unauthorized: no access token", http.StatusUnauthorized)
+		case pair.AccessToken.Validation.IsExpired:
+			http.Error(w, "Unauthorized: token is expired", http.StatusUnauthorized)
+		case pair.AccessToken.Validation.IsMalformed:
+			http.Error(w, "Unauthorized: token is malformed", http.StatusUnauthorized)
+		case pair.AccessToken.Validation.IsParseError:
+			err := pair.AccessToken.Validation.Error
+			http.Error(w, "CheckAuth: token parse error: "+err.Error(), http.StatusInternalServerError)
+		case pair.AccessToken.Validation.Error != nil:
+			err := pair.AccessToken.Validation.Error
+			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
+		default:
+			w.WriteHeader(http.StatusOK)
+		}
 	}
 }
 
@@ -86,6 +133,76 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			w.WriteHeader(http.StatusUnauthorized)
 		}
 	}
+}
+
+func (ep *IdentityEndpoint[U]) tokensFromRequest(r *http.Request) (identity.ValidatedTokenPair, error) {
+	accessTokenHeader := r.Header.Get(ep.accessTokenHeaderName())
+	refreshTokenHeader := r.Header.Get(ep.refreshTokenHeaderName())
+
+	pair := identity.ValidatedTokenPair{}
+	var err error
+
+	if len(accessTokenHeader) > 0 {
+		pair.AccessToken, err = ep.parseToken(accessTokenHeader)
+		if err != nil {
+			return pair, errors.Join(
+				fmt.Errorf("access token error"),
+				err,
+			)
+		}
+	}
+
+	if len(refreshTokenHeader) > 0 {
+		pair.RefreshToken, err = ep.parseToken(refreshTokenHeader)
+		if err != nil {
+			return pair, errors.Join(
+				fmt.Errorf("refresh token error"),
+				err,
+			)
+		}
+	}
+
+	return pair, nil
+}
+
+func (ep *IdentityEndpoint[U]) parseToken(tokenStr string) (*identity.ValidatedToken, error) {
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&jwt.RegisteredClaims{},
+		func(token *jwt.Token) (any, error) {
+			return &ep.TokenPrivateKey.PublicKey, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodES256.Name}),
+	)
+
+	tokenValidation, err := jwtutils.ValidateTokenParseError(err)
+	if err != nil {
+		return nil, err
+	}
+
+	return &identity.ValidatedToken{
+		Token: &identity.Token{
+			JWT:       token,
+			JWTString: tokenStr,
+		},
+		Validation: tokenValidation,
+	}, nil
+}
+
+func (ep *IdentityEndpoint[U]) accessTokenHeaderName() string {
+	if len(ep.AccessTokenHeader) == 0 {
+		return AccessTokenHeader
+	}
+
+	return ep.AccessTokenHeader
+}
+
+func (ep *IdentityEndpoint[U]) refreshTokenHeaderName() string {
+	if len(ep.RefreshTokenHeader) == 0 {
+		return RefreshTokenHeader
+	}
+
+	return ep.RefreshTokenHeader
 }
 
 func (ep *IdentityEndpoint[U]) log() *slog.Logger {
