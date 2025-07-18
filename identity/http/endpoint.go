@@ -135,6 +135,74 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 	}
 }
 
+func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
+	log := ep.log()
+
+	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
+		pair, err := ep.tokensFromRequest(r)
+		if err != nil {
+			log.Error("Refresh failure", "err", err.Error())
+			http.Error(
+				w,
+				"Refresh has failed: "+err.Error(),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+
+		switch {
+		case pair.RefreshToken == nil:
+			http.Error(w, "Bad request: refresh token must be attached", http.StatusBadRequest)
+		case pair.RefreshToken.Validation.IsExpired:
+			http.Error(w, "Unauthorized: token is expired", http.StatusUnauthorized)
+		case pair.RefreshToken.Validation.IsMalformed:
+			http.Error(w, "Unauthorized: token is malformed", http.StatusUnauthorized)
+		case pair.RefreshToken.Validation.IsParseError:
+			err := pair.RefreshToken.Validation.Error
+			http.Error(w, "RefreshAuth: token parse error"+err.Error(), http.StatusInternalServerError)
+		case pair.RefreshToken.Validation.Error != nil:
+			err := pair.RefreshToken.Validation.Error
+			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
+		}
+
+		if !pair.RefreshToken.Validation.IsOk() {
+			return
+		}
+
+		tokenPair, err := ep.Provider.Refresh(r.Context(), pair.RefreshToken.Token)
+		if err != nil {
+			http.Error(w, "Refresh: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		if err := ep.respondWithTokenPair(w, &tokenPair); err != nil {
+			http.Error(
+				w,
+				"Refresh: failed to respond with new tokens: "+err.Error(),
+				http.StatusInternalServerError,
+			)
+			return
+		}
+	}
+}
+
+func (ep *IdentityEndpoint[U]) respondWithTokenPair(w http.ResponseWriter, pair *identity.TokenPair) error {
+	if token := pair.AccessToken; token != nil {
+		w.Header().Set(ep.accessTokenHeaderName(), token.JWTString)
+	}
+
+	if token := pair.RefreshToken; token != nil {
+		w.Header().Set(ep.refreshTokenHeaderName(), token.JWTString)
+	}
+
+	fmt.Fprintf(
+		w,
+		"Success: %d tokens, %s, have been placed to headers",
+		pair.Num(),
+		pair.Kinds(),
+	)
+}
+
 func (ep *IdentityEndpoint[U]) tokensFromRequest(r *http.Request) (identity.ValidatedTokenPair, error) {
 	accessTokenHeader := r.Header.Get(ep.accessTokenHeaderName())
 	refreshTokenHeader := r.Header.Get(ep.refreshTokenHeaderName())
