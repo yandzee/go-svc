@@ -129,17 +129,22 @@ func Scan(p string) ([]ScannedEntry, error) {
 		relPath, _ := filepath.Rel(p, fpath)
 		dirPath := filepath.Join("/", filepath.Base(p), relPath)
 
+		name := ""
+		if e != nil {
+			name = e.Name()
+		}
+
 		scanned = append(scanned, ScannedEntry{
 			JoinedPath:   fpath,
 			RelativePath: relPath,
 			DirPath:      dirPath,
 			RootPath:     p,
-			Name:         e.Name(),
+			Name:         name,
 			Entry:        e,
 			Err:          err,
 		})
 
-		return nil
+		return err
 	})
 
 	return scanned, err
