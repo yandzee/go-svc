@@ -1,6 +1,8 @@
 package identity
 
 import (
+	"time"
+
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 )
@@ -20,6 +22,15 @@ func (t *Token) RawString() string {
 	}
 
 	return ""
+}
+
+func (t *Token) Remaining() (time.Duration, error) {
+	numDate, err := t.JWT.Claims.GetExpirationTime()
+	if err != nil {
+		return 0, err
+	}
+
+	return time.Until(numDate.Time), nil
 }
 
 func (t *Token) GetUserId() (uuid.UUID, bool) {

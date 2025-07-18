@@ -63,6 +63,10 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
 		default:
 			w.WriteHeader(http.StatusOK)
+			dur, err := pair.AccessToken.Token.Remaining()
+			if err == nil {
+				_, _ = fmt.Fprintf(w, "CheckAuth: token is valid for duration: %s", dur)
+			}
 		}
 	}
 }
@@ -165,7 +169,7 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
 		}
 
-		if !pair.RefreshToken.Validation.IsOk() {
+		if pair.RefreshToken == nil || !pair.RefreshToken.Validation.IsOk() {
 			return
 		}
 
