@@ -195,12 +195,14 @@ func (ep *IdentityEndpoint[U]) respondWithTokenPair(w http.ResponseWriter, pair 
 		w.Header().Set(ep.refreshTokenHeaderName(), token.JWTString)
 	}
 
-	fmt.Fprintf(
+	_, err := fmt.Fprintf(
 		w,
 		"Success: %d tokens, %s, have been placed to headers",
 		pair.Num(),
 		pair.Kinds(),
 	)
+
+	return err
 }
 
 func (ep *IdentityEndpoint[U]) tokensFromRequest(r *http.Request) (identity.ValidatedTokenPair, error) {

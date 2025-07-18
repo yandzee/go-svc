@@ -143,6 +143,22 @@ func (p *RegistryProvider[U]) SignUp(
 	}, nil
 }
 
+func (p *RegistryProvider[U]) Refresh(
+	ctx context.Context,
+	refreshToken *Token,
+) (TokenPair, error) {
+	if refreshToken == nil {
+		return TokenPair{}, errors.New("refresh token is nil")
+	}
+
+	userId, isOk := refreshToken.GetUserId()
+	if !isOk {
+		return TokenPair{}, errors.New("refresh token contains")
+	}
+
+	return p.createSignedTokenPair(&userId)
+}
+
 func (p *RegistryProvider[U]) createSignedTokenPair(userId *uuid.UUID) (TokenPair, error) {
 	var pair TokenPair
 	var err error
