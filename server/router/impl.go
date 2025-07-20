@@ -161,7 +161,8 @@ func (ri *RouterImpl) IterRoutes() iter.Seq[*Route] {
 
 func (ri *RouterImpl) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	for route := range routes {
-		if route.NotFoundHandler != nil {
+		// NOTE: Not found handler makes sense only on empty prefix
+		if route.NotFoundHandler != nil && len(prefix) == 0 {
 			ri.NotFound(route.NotFoundHandler)
 			continue
 		}
