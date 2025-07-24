@@ -7,7 +7,8 @@ import (
 	"testing"
 
 	"github.com/yandzee/go-svc/httputils"
-	"github.com/yandzee/go-svc/server/router"
+	"github.com/yandzee/go-svc/router"
+	stdrouter "github.com/yandzee/go-svc/router/std"
 )
 
 const (
@@ -22,12 +23,7 @@ type TestOutputs struct {
 }
 
 func TestMethods(t *testing.T) {
-	r, outs := buildRouter(t)
-	handler, err := r.Handler()
-
-	if err != nil {
-		t.Fatalf("Failed to build router.Handler(): %s\n", err.Error())
-	}
+	handler, outs := buildRouter(t)
 
 	for _, method := range httputils.AllMethods {
 		for _, baseUrl := range baseUrls() {
@@ -50,7 +46,7 @@ func TestMethods(t *testing.T) {
 	}
 }
 
-func buildRouter(t *testing.T) (router.Router, *TestOutputs) {
+func buildRouter(t *testing.T) (*http.ServeMux, *TestOutputs) {
 	r := router.New()
 	ext := router.New()
 	att := router.New()
@@ -63,28 +59,16 @@ func buildRouter(t *testing.T) (router.Router, *TestOutputs) {
 		methodStr := strings.ToLower(method)
 		path := BaseURL + "/" + methodStr
 
-		r.Method(method, path, func(
-			w http.ResponseWriter,
-			req *http.Request,
-			ctx router.Context,
-		) {
+		r.Method(method, path, func(rctx *router.RequestContext) {
 			outs.Counter[path] += 1
 		})
 
 		extPath := ExtendBaseURL + "/" + methodStr
-		ext.Method(method, extPath, func(
-			w http.ResponseWriter,
-			req *http.Request,
-			ctx router.Context,
-		) {
+		ext.Method(method, extPath, func(rctx *router.RequestContext) {
 			outs.Counter[extPath] += 1
 		})
 
-		att.Method(method, "/"+methodStr, func(
-			w http.ResponseWriter,
-			req *http.Request,
-			ctx router.Context,
-		) {
+		att.Method(method, "/"+methodStr, func(ctx *router.RequestContext) {
 			path := AttachedBaseURL + "/" + methodStr
 			outs.Counter[path] += 1
 		})
@@ -98,7 +82,7 @@ func buildRouter(t *testing.T) (router.Router, *TestOutputs) {
 		t.Fatalf("Failed to attach routes: %s", err.Error())
 	}
 
-	return r, outs
+	return stdrouter.Build(&r), outs
 }
 
 func baseUrls() []string {

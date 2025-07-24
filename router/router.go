@@ -1,11 +1,11 @@
 package router
 
 import (
+	"io/fs"
 	"iter"
 	"log/slog"
 	"net/http"
-
-	"github.com/yandzee/go-svc/httputils"
+	// "github.com/yandzee/go-svc/httputils"
 )
 
 type Router interface {
@@ -21,7 +21,7 @@ type Router interface {
 	Patch(string, Handler)
 	Trace(string, Handler)
 
-	Files(string, http.FileSystem)
+	Files(string, fs.FS)
 	NotFound(Handler)
 
 	// Second param is optional: prefix for routes to add
@@ -33,13 +33,24 @@ type Router interface {
 	IterRoutes() iter.Seq[*Route]
 }
 
-type Handler func(http.ResponseWriter, *http.Request, Context)
+type Handler func(*RequestContext)
+
+type Request interface {
+	PathParam(string) (string, bool)
+}
+
+type Response interface{}
+
+type RequestContext struct {
+	Request  Request
+	Response Response
+}
 
 type Route struct {
 	Method          string
 	Path            string
 	Handler         Handler
-	FileSystem      http.FileSystem
+	FileSystem      fs.FS
 	NotFoundHandler Handler
 }
 
@@ -56,22 +67,17 @@ type CORSOptions struct {
 	Logger       *slog.Logger
 }
 
-type Context interface {
-	Param(string) (string, bool)
-	Jsoner() *httputils.Jsoner
-}
+// type Context interface {
+// 	Jsoner() *httputils.Jsoner
+// }
 
-var NotFoundHandler = Handler(func(w http.ResponseWriter, _ *http.Request, _ Context) {
-	http.Error(w, "", http.StatusNotFound)
-})
-
-var LoggedNotFound = func(log *slog.Logger) Handler {
-	return func(w http.ResponseWriter, r *http.Request, _ Context) {
-		log.Warn("resource is not found", "route", r.URL.Path)
-		http.Error(w, "", http.StatusNotFound)
-	}
-}
-
-func New() Router {
-	return &RouterImpl{}
-}
+// var NotFoundHandler = Handler(func(w http.ResponseWriter, _ *http.Request, _ Context) {
+// 	http.Error(w, "", http.StatusNotFound)
+// })
+//
+// var LoggedNotFound = func(log *slog.Logger) Handler {
+// 	return func(w http.ResponseWriter, r *http.Request, _ Context) {
+// 		log.Warn("resource is not found", "route", r.URL.Path)
+// 		http.Error(w, "", http.StatusNotFound)
+// 	}
+// }
