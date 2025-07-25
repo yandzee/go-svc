@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"testing/fstest"
+
 	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/router"
 	stdrouter "github.com/yandzee/go-svc/router/std"
@@ -15,6 +17,12 @@ const (
 	BaseURL         = "/test"
 	ExtendBaseURL   = "/extended"
 	AttachedBaseURL = "/attached"
+	FilesURL        = "/files"
+
+	TestFilename1    = "testfile1"
+	TestFilename2    = "testfile2"
+	TestFileContent1 = "test file content 1"
+	TestFileContent2 = "test file content 2"
 )
 
 type TestOutputs struct {
@@ -46,6 +54,25 @@ func TestMethods(t *testing.T) {
 	}
 }
 
+func TestFiles(t *testing.T) {
+	handler, _ := buildRouter(t)
+	//
+	// fpath1 := FilesURL
+	// fpath2 := AttachedBaseURL + FilesURL
+
+	req1 := httptest.NewRequest(http.MethodGet, FilesURL+"/"+TestFilename1, nil)
+	_ = httptest.NewRequest(http.MethodGet, AttachedBaseURL+FilesURL, nil)
+
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req1)
+	if s := resp.Body.String(); s != TestFileContent1 {
+		t.Fatalf("wrong response '%s' for file '%s'", s, req1.URL.Path)
+		return
+	}
+
+}
+
 func buildRouter(t *testing.T) (*http.ServeMux, *TestOutputs) {
 	r := router.New()
 	ext := router.New()
@@ -73,6 +100,18 @@ func buildRouter(t *testing.T) (*http.ServeMux, *TestOutputs) {
 			outs.Counter[path] += 1
 		})
 	}
+
+	r.Files(FilesURL, fstest.MapFS{
+		TestFilename1: {
+			Data: []byte(TestFileContent1),
+		},
+	})
+
+	att.Files(FilesURL, fstest.MapFS{
+		TestFilename2: {
+			Data: []byte(TestFileContent2),
+		},
+	})
 
 	if err := r.Extend(ext.IterRoutes()); err != nil {
 		t.Fatalf("Failed to extend routes: %s", err.Error())

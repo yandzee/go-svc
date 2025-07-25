@@ -13,6 +13,7 @@ func Build(b *router.Builder) *http.ServeMux {
 	for route := range b.IterRoutes() {
 		switch {
 		case route.FileSystem != nil:
+			fmt.Printf("SETTING FS PATH %s\n", route.Path)
 			mux.Handle(route.Path, http.FileServerFS(route.FileSystem))
 		case route.Method == router.MethodAll:
 			mux.Handle(route.Path, makeHandler(route.Handler))
