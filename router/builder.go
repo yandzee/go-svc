@@ -15,14 +15,13 @@ import (
 const MethodAll = ""
 
 type Builder struct {
-	handlers    map[string]map[string]Handler
-	files       map[string]fs.FS
-	corsEnabled bool
-	corsOptions *CORSOptions
-	// notFoundHandler Handler
+	Handlers    map[string]map[string]Handler
+	HandlersFS  map[string]fs.FS
+	CORSEnabled bool
+	CORSOptions *CORSOptions
 }
 
-func New() Builder {
+func NewBuilder() Builder {
 	return Builder{}
 }
 
@@ -92,10 +91,10 @@ func (b *Builder) Method(method, path string, handler Handler) {
 }
 
 func (b *Builder) CORS(enabled bool, maybeOpts ...CORSOptions) {
-	b.corsEnabled = enabled
+	b.CORSEnabled = enabled
 
 	if !enabled {
-		b.corsOptions = nil
+		b.CORSOptions = nil
 		return
 	}
 
@@ -115,20 +114,16 @@ func (b *Builder) CORS(enabled bool, maybeOpts ...CORSOptions) {
 		}
 	}
 
-	b.corsOptions = opts
+	b.CORSOptions = opts
 }
 
 func (b *Builder) Files(p string, fs fs.FS) {
 	b.ensureFiles()[p] = fs
 }
 
-// func (b *RouterBuilder) NotFound(nfh Handler) {
-// 	b.notFoundHandler = nfh
-// }
-
 func (b *Builder) IterRoutes() iter.Seq[*Route] {
 	return func(yield func(*Route) bool) {
-		for method, pathHandlers := range b.handlers {
+		for method, pathHandlers := range b.Handlers {
 			for path, handler := range pathHandlers {
 				r := Route{
 					Method:  method,
@@ -142,7 +137,7 @@ func (b *Builder) IterRoutes() iter.Seq[*Route] {
 			}
 		}
 
-		for path, fs := range b.files {
+		for path, fs := range b.HandlersFS {
 			r := Route{
 				Method:     http.MethodGet,
 				Path:       path,
@@ -153,27 +148,11 @@ func (b *Builder) IterRoutes() iter.Seq[*Route] {
 				return
 			}
 		}
-
-		// if b.notFoundHandler != nil {
-		// 	r := Route{
-		// 		NotFoundHandler: b.notFoundHandler,
-		// 	}
-		//
-		// 	if !yield(&r) {
-		// 		return
-		// 	}
-		// }
 	}
 }
 
 func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	for route := range routes {
-		// // NOTE: Not found handler makes sense only on empty prefix
-		// if route.NotFoundHandler != nil && len(prefix) == 0 {
-		// 	b.NotFound(route.NotFoundHandler)
-		// 	continue
-		// }
-
 		path := route.Path
 
 		if len(prefix) > 0 {
@@ -222,26 +201,7 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 // 		}
 // 	}
 //
-// 	if b.corsEnabled {
-// 		opts := cors.Options{
-// 			AllowedOrigins:   b.corsOptions.AllowedOrigins,
-// 			AllowCredentials: b.corsOptions.AllowCredentials,
-// 			AllowedHeaders:   b.corsOptions.AllowedHeaders,
-// 			AllowedMethods:   b.corsOptions.AllowedMethods,
-// 			ExposedHeaders:   b.corsOptions.ExposedHeaders,
-// 			Debug:            b.corsOptions.DebugEnabled,
-// 			Logger:           nil,
-// 		}
-//
-// 		if opts.Debug {
-// 			opts.Logger = &corsLogger{
-// 				Log: b.corsOptions.Logger,
-// 			}
-// 		}
-//
-// 		corsServer := cors.New(opts)
-// 		handler = corsServer.Handler(handler)
-// 	}
+
 //
 // 	return handler, nil
 // }
@@ -277,23 +237,23 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 // }
 
 func (b *Builder) ensureHandlers(method string) map[string]Handler {
-	if b.handlers == nil {
-		b.handlers = make(map[string]map[string]Handler)
+	if b.Handlers == nil {
+		b.Handlers = make(map[string]map[string]Handler)
 	}
 
-	methodHandlers, ok := b.handlers[method]
+	methodHandlers, ok := b.Handlers[method]
 	if ok {
 		return methodHandlers
 	}
 
-	b.handlers[method] = make(map[string]Handler)
-	return b.handlers[method]
+	b.Handlers[method] = make(map[string]Handler)
+	return b.Handlers[method]
 }
 
 func (b *Builder) ensureFiles() map[string]fs.FS {
-	if b.files == nil {
-		b.files = make(map[string]fs.FS)
+	if b.HandlersFS == nil {
+		b.HandlersFS = make(map[string]fs.FS)
 	}
 
-	return b.files
+	return b.HandlersFS
 }

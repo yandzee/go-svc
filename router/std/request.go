@@ -11,3 +11,7 @@ func (r *Request) PathParam(key string) (string, bool) {
 
 	return p, len(p) > 0
 }
+
+func (r *Request) Headers() http.Header {
+	return r.Original.Header
+}

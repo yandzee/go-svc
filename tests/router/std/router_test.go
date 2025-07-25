@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"testing/fstest"
+
 	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/router"
 	stdrouter "github.com/yandzee/go-svc/router/std"
@@ -15,6 +17,12 @@ const (
 	BaseURL         = "/test"
 	ExtendBaseURL   = "/extended"
 	AttachedBaseURL = "/attached"
+	FilesURL        = "/files/"
+
+	TestFilename1    = "testfile1.dat"
+	TestFilename2    = "testfile2.dat"
+	TestFileContent1 = "test file content 1"
+	TestFileContent2 = "test file content 2"
 )
 
 type TestOutputs struct {
@@ -46,10 +54,32 @@ func TestMethods(t *testing.T) {
 	}
 }
 
-func buildRouter(t *testing.T) (*http.ServeMux, *TestOutputs) {
-	r := router.New()
-	ext := router.New()
-	att := router.New()
+func TestFiles(t *testing.T) {
+	req1 := httptest.NewRequest(http.MethodGet, FilesURL+TestFilename1, nil)
+	req2 := httptest.NewRequest(http.MethodGet, AttachedBaseURL+FilesURL+TestFilename2, nil)
+	expectedContent := []string{TestFileContent1, TestFileContent2}
+
+	for i, req := range []*http.Request{req1, req2} {
+		handler, _ := buildRouter(t)
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+		if resp.Code != http.StatusOK {
+			t.Fatalf("wrong response code %d for file '%s'", resp.Code, req.URL.Path)
+			return
+		}
+
+		if s := resp.Body.String(); s != expectedContent[i] {
+			t.Fatalf("wrong response '%s' for file '%s'", s, req.URL.Path)
+			return
+		}
+	}
+}
+
+func buildRouter(t *testing.T) (http.Handler, *TestOutputs) {
+	r := router.NewBuilder()
+	ext := router.NewBuilder()
+	att := router.NewBuilder()
 
 	outs := &TestOutputs{
 		Counter: make(map[string]int),
@@ -73,6 +103,18 @@ func buildRouter(t *testing.T) (*http.ServeMux, *TestOutputs) {
 			outs.Counter[path] += 1
 		})
 	}
+
+	r.Files(FilesURL, fstest.MapFS{
+		TestFilename1: {
+			Data: []byte(TestFileContent1),
+		},
+	})
+
+	att.Files(FilesURL, fstest.MapFS{
+		TestFilename2: {
+			Data: []byte(TestFileContent2),
+		},
+	})
 
 	if err := r.Extend(ext.IterRoutes()); err != nil {
 		t.Fatalf("Failed to extend routes: %s", err.Error())

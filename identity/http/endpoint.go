@@ -11,7 +11,7 @@ import (
 	"github.com/yandzee/go-svc/identity"
 	"github.com/yandzee/go-svc/jwtutils"
 	"github.com/yandzee/go-svc/log"
-	"github.com/yandzee/go-svc/server/router"
+	"github.com/yandzee/go-svc/router"
 )
 
 const (
@@ -36,36 +36,45 @@ func Wrap[U identity.User](id identity.Provider[U]) *IdentityEndpoint[U] {
 func (ep *IdentityEndpoint[U]) Check() router.Handler {
 	log := ep.log()
 
-	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
-		pair, err := ep.tokensFromRequest(r)
+	return func(rctx *router.RequestContext) {
+		pair, err := ep.tokensFromRequest(rctx.Request)
 		if err != nil {
 			log.Error("tokensFromRequest failure", "err", err.Error())
-			http.Error(
-				w,
-				"Auth check has failed: "+err.Error(),
+
+			rctx.Response.Status(
 				http.StatusInternalServerError,
+				"Auth check has failed: "+err.Error(),
 			)
 			return
 		}
 
 		switch {
 		case pair.AccessToken == nil:
-			http.Error(w, "Unauthorized: no access token", http.StatusUnauthorized)
+			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: no access token")
 		case pair.AccessToken.Validation.IsExpired:
-			http.Error(w, "Unauthorized: token is expired", http.StatusUnauthorized)
+			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: token is expired")
 		case pair.AccessToken.Validation.IsMalformed:
-			http.Error(w, "Unauthorized: token is malformed", http.StatusUnauthorized)
+			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: token is malformed")
 		case pair.AccessToken.Validation.IsParseError:
 			err := pair.AccessToken.Validation.Error
-			http.Error(w, "CheckAuth: token parse error: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Status(
+				http.StatusInternalServerError,
+				"CheckAuth: token parse error: "+err.Error(),
+			)
 		case pair.AccessToken.Validation.Error != nil:
 			err := pair.AccessToken.Validation.Error
-			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Status(
+				http.StatusInternalServerError,
+				"CheckAuth: unexpected error: "+err.Error(),
+			)
 		default:
-			w.WriteHeader(http.StatusOK)
+			rctx.Response.Status(http.StatusOK)
 			dur, err := pair.AccessToken.Token.Remaining()
 			if err == nil {
-				_, _ = fmt.Fprintf(w, "CheckAuth: token is valid for duration: %s", dur)
+				rctx.Response.Statusf(
+					http.StatusOK,
+					"CheckAuth: token is valid for duration: %s", dur,
+				)
 			}
 		}
 	}
@@ -74,9 +83,9 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 	log := ep.log()
 
-	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
+	return func(rctx *router.RequestContext) {
 		signupRequest := identity.PlainCredentials{}
-		jsoner := ctx.Jsoner()
+		jsoner := rctx.Jsoner()
 
 		res := jsoner.DecodeRequest(w, r, &signupRequest)
 		if st, msg := res.AsHTTPStatus(); st != http.StatusOK {
@@ -209,9 +218,11 @@ func (ep *IdentityEndpoint[U]) respondWithTokenPair(w http.ResponseWriter, pair 
 	return err
 }
 
-func (ep *IdentityEndpoint[U]) tokensFromRequest(r *http.Request) (identity.ValidatedTokenPair, error) {
-	accessTokenHeader := r.Header.Get(ep.accessTokenHeaderName())
-	refreshTokenHeader := r.Header.Get(ep.refreshTokenHeaderName())
+func (ep *IdentityEndpoint[U]) tokensFromRequest(r router.Request) (identity.ValidatedTokenPair, error) {
+	headers := r.Headers()
+
+	accessTokenHeader := headers.Get(ep.accessTokenHeaderName())
+	refreshTokenHeader := headers.Get(ep.refreshTokenHeaderName())
 
 	pair := identity.ValidatedTokenPair{}
 	var err error
