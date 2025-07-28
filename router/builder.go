@@ -186,56 +186,6 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	return nil
 }
 
-// func (b *RouterBuilder) Handler() (http.Handler, error) {
-// 	root := http.NewServeMux()
-// 	handler := http.Handler(root)
-//
-// 	for route := range b.IterRoutes() {
-// 		switch {
-// 		case route.Handler != nil:
-// 			root.Handle(route.Method, route.Path, b.makeHandle(route.Handler))
-// 		case route.FileSystem != nil:
-// 			root.ServeFiles(b.makeFilesPath(route.Path), route.FileSystem)
-// 		case route.NotFoundHandler != nil:
-// 			root.NotFound = b.makeHandler(route.NotFoundHandler)
-// 		}
-// 	}
-//
-
-//
-// 	return handler, nil
-// }
-
-// func (b *RouterBuilder) makeHandle(h Handler) httpHandle {
-// 	return func(w http.ResponseWriter, req *http.Request, ps httpParams) {
-// 		h(w, req, &HttprouterContext{
-// 			ps: ps,
-// 		})
-// 	}
-// }
-//
-// func (b *RouterBuilder) makeHandler(h Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-// 		params := httpParamsFromContext(req.Context())
-//
-// 		h(w, req, &HttprouterContext{
-// 			ps: params,
-// 		})
-// 	})
-// }
-
-// func (b *RouterBuilder) makeFilesPath(p string) string {
-// 	if strings.HasSuffix(p, "*filepath") {
-// 		return p
-// 	}
-//
-// 	if strings.HasSuffix(p, "/") {
-// 		return p + "*filepath"
-// 	}
-//
-// 	return p + "/*filepath"
-// }
-
 func (b *Builder) ensureHandlers(method string) map[string]Handler {
 	if b.Handlers == nil {
 		b.Handlers = make(map[string]map[string]Handler)

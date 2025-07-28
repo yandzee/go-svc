@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/yandzee/go-svc/data/jsoner"
 	"github.com/yandzee/go-svc/identity"
 	"github.com/yandzee/go-svc/jwtutils"
 	"github.com/yandzee/go-svc/log"
@@ -17,6 +18,8 @@ import (
 const (
 	AccessTokenHeader  = "X-Access-Token"
 	RefreshTokenHeader = "X-Refresh-Token"
+
+	KiloByte = 1024
 )
 
 type IdentityEndpoint[U identity.User] struct {
@@ -41,7 +44,7 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 		if err != nil {
 			log.Error("tokensFromRequest failure", "err", err.Error())
 
-			rctx.Response.Status(
+			rctx.Response.String(
 				http.StatusInternalServerError,
 				"Auth check has failed: "+err.Error(),
 			)
@@ -50,28 +53,28 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 
 		switch {
 		case pair.AccessToken == nil:
-			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: no access token")
+			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: no access token")
 		case pair.AccessToken.Validation.IsExpired:
-			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: token is expired")
+			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is expired")
 		case pair.AccessToken.Validation.IsMalformed:
-			rctx.Response.Status(http.StatusUnauthorized, "Unauthorized: token is malformed")
+			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is malformed")
 		case pair.AccessToken.Validation.IsParseError:
 			err := pair.AccessToken.Validation.Error
-			rctx.Response.Status(
+			rctx.Response.String(
 				http.StatusInternalServerError,
 				"CheckAuth: token parse error: "+err.Error(),
 			)
 		case pair.AccessToken.Validation.Error != nil:
 			err := pair.AccessToken.Validation.Error
-			rctx.Response.Status(
+			rctx.Response.String(
 				http.StatusInternalServerError,
 				"CheckAuth: unexpected error: "+err.Error(),
 			)
 		default:
-			rctx.Response.Status(http.StatusOK)
+			rctx.Response.String(http.StatusOK)
 			dur, err := pair.AccessToken.Token.Remaining()
 			if err == nil {
-				rctx.Response.Statusf(
+				rctx.Response.Stringf(
 					http.StatusOK,
 					"CheckAuth: token is valid for duration: %s", dur,
 				)
@@ -85,65 +88,75 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 
 	return func(rctx *router.RequestContext) {
 		signupRequest := identity.PlainCredentials{}
-		jsoner := rctx.Jsoner()
+		jsoner := jsoner.Jsoner{}
 
-		res := jsoner.DecodeRequest(w, r, &signupRequest)
-		if st, msg := res.AsHTTPStatus(); st != http.StatusOK {
-			log.Error("Signup body parse failure", "err", msg)
-			http.Error(w, msg, st)
+		res := jsoner.Decode(rctx.Request.LimitedBody(16*KiloByte), &signupRequest)
+		if err := res.Err(); err != nil {
+			log.Error("Signup body parse failure", "err", err.Error())
+
+			rctx.Response.Stringf(
+				http.StatusBadRequest,
+				"Failed to parse Signup data: %s",
+				err.Error(),
+			)
 			return
 		}
 
 		log.Debug("Signup", "request", signupRequest)
 		if msg, ok := signupRequest.IsValid(); !ok {
 			log.Debug("Signup invalid credentials", "msg", msg)
-			http.Error(w, msg, http.StatusBadRequest)
+			rctx.Response.String(http.StatusBadRequest, msg)
 			return
 		}
 
-		signupResult, err := ep.Provider.SignUp(r.Context(), &signupRequest)
+		signupResult, err := ep.Provider.SignUp(rctx.Context(), &signupRequest)
 		if err != nil {
 			log.Error("Signup failed", "err", err.Error())
-			http.Error(w, "Signup failed: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Stringf(http.StatusInternalServerError, "Signup failure: %s", err.Error())
 			return
 		}
 
-		_ = jsoner.EncodeResponse(w, signupResult.AsPlain())
+		_ = jsoner.Encode(rctx.Response, signupResult.AsPlain())
 	}
 }
 
 func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 	log := ep.log()
 
-	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
+	return func(rctx *router.RequestContext) {
 		creds := identity.PlainCredentials{}
-		jsoner := ctx.Jsoner()
+		jsoner := jsoner.Jsoner{}
 
-		res := jsoner.DecodeRequest(w, r, &creds)
-		if st, msg := res.AsHTTPStatus(); st != http.StatusOK {
-			log.Error("Signin body parse failure", "err", msg)
-			http.Error(w, msg, st)
+		res := jsoner.Decode(rctx.Request.LimitedBody(16*KiloByte), &creds)
+		if err := res.Err(); err != nil {
+			log.Error("Signin body parse failure", "err", err.Error())
+			rctx.Response.Stringf(
+				http.StatusBadRequest,
+				"Failed to parse signin request: %s",
+				err.Error(),
+			)
+
 			return
 		}
 
 		log.Debug("Signin", "credentials", creds)
 		if msg, ok := creds.IsValid(); !ok {
 			log.Debug("Signin invalid credentials", "msg", msg)
-			http.Error(w, msg, http.StatusBadRequest)
+			rctx.Response.Stringf(http.StatusBadRequest, "Invalid signin credentials: %s", msg)
 			return
 		}
 
-		signinResult, err := ep.Provider.SignIn(r.Context(), &creds)
+		signinResult, err := ep.Provider.SignIn(rctx.Context(), &creds)
 		if err != nil {
 			log.Error("Signin failed", "err", err.Error())
-			http.Error(w, "Signin failed: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Stringf(http.StatusInternalServerError, "Signin failed: %s", err.Error())
 			return
 		}
 
-		_ = jsoner.EncodeResponse(w, signinResult.AsPlain())
+		_ = jsoner.Encode(rctx.Response, signinResult.AsPlain())
 
 		if signinResult.NotAuthorized {
-			w.WriteHeader(http.StatusUnauthorized)
+			rctx.Response.String(http.StatusUnauthorized)
 		}
 	}
 }
@@ -151,65 +164,70 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 	log := ep.log()
 
-	return func(w http.ResponseWriter, r *http.Request, ctx router.Context) {
-		pair, err := ep.tokensFromRequest(r)
+	return func(rctx *router.RequestContext) {
+		pair, err := ep.tokensFromRequest(rctx.Request)
 		if err != nil {
 			log.Error("Refresh failure", "err", err.Error())
-			http.Error(
-				w,
-				"Refresh has failed: "+err.Error(),
+			rctx.Response.Stringf(
 				http.StatusInternalServerError,
+				"Refresh has failed: %s",
+				err.Error(),
 			)
 			return
 		}
 
 		switch {
 		case pair.RefreshToken == nil:
-			http.Error(w, "Bad request: refresh token must be attached", http.StatusBadRequest)
+			rctx.Response.String(http.StatusBadRequest, "Refresh token must be attached")
 		case pair.RefreshToken.Validation.IsExpired:
-			http.Error(w, "Unauthorized: token is expired", http.StatusUnauthorized)
+			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is expired")
 		case pair.RefreshToken.Validation.IsMalformed:
-			http.Error(w, "Unauthorized: token is malformed", http.StatusUnauthorized)
+			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is malformed")
 		case pair.RefreshToken.Validation.IsParseError:
 			err := pair.RefreshToken.Validation.Error
-			http.Error(w, "RefreshAuth: token parse error"+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Stringf(http.StatusInternalServerError, "RefreshAuth: token parse error: %s", err.Error())
 		case pair.RefreshToken.Validation.Error != nil:
 			err := pair.RefreshToken.Validation.Error
-			http.Error(w, "CheckAuth: unexpected error: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Stringf(http.StatusInternalServerError, "CheckAuth: unexpected error: %s", err.Error())
 		}
 
 		if pair.RefreshToken == nil || !pair.RefreshToken.Validation.IsOk() {
 			return
 		}
 
-		tokenPair, err := ep.Provider.Refresh(r.Context(), pair.RefreshToken.Token)
+		tokenPair, err := ep.Provider.Refresh(rctx.Context(), pair.RefreshToken.Token)
 		if err != nil {
-			http.Error(w, "Refresh: "+err.Error(), http.StatusInternalServerError)
+			rctx.Response.Stringf(http.StatusInternalServerError, "Refresh: %s", err.Error())
 			return
 		}
 
-		if err := ep.respondWithTokenPair(w, &tokenPair); err != nil {
-			http.Error(
-				w,
-				"Refresh: failed to respond with new tokens: "+err.Error(),
+		if err := ep.respondWithTokenPair(rctx, &tokenPair); err != nil {
+			rctx.Response.Stringf(
 				http.StatusInternalServerError,
+				"Refresh: failed to respond with new tokens: %s",
+				err.Error(),
 			)
 			return
 		}
 	}
 }
 
-func (ep *IdentityEndpoint[U]) respondWithTokenPair(w http.ResponseWriter, pair *identity.TokenPair) error {
+func (ep *IdentityEndpoint[U]) respondWithTokenPair(
+	rctx *router.RequestContext,
+	pair *identity.TokenPair,
+) error {
+	headers := rctx.Response.Headers()
+
 	if token := pair.AccessToken; token != nil {
-		w.Header().Set(ep.accessTokenHeaderName(), token.JWTString)
+		headers.Set(ep.accessTokenHeaderName(), token.JWTString)
 	}
 
 	if token := pair.RefreshToken; token != nil {
-		w.Header().Set(ep.refreshTokenHeaderName(), token.JWTString)
+		headers.Set(ep.refreshTokenHeaderName(), token.JWTString)
 	}
 
 	_, err := fmt.Fprintf(
-		w,
+		rctx.Response,
 		"Success: %d tokens, %s, have been placed to headers",
 		pair.Num(),
 		pair.Kinds(),

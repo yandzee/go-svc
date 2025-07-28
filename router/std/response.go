@@ -9,7 +9,15 @@ type Response struct {
 	Original http.ResponseWriter
 }
 
-func (r *Response) Status(code int, body ...string) {
+func (r *Response) Write(d []byte) (int, error) {
+	return r.Original.Write(d)
+}
+
+func (r *Response) Headers() http.Header {
+	return r.Original.Header()
+}
+
+func (r *Response) String(code int, body ...string) {
 	switch {
 	case code < 300:
 		r.Original.WriteHeader(code)
@@ -27,7 +35,7 @@ func (r *Response) Status(code int, body ...string) {
 	}
 }
 
-func (r *Response) Statusf(code int, fmts string, args ...any) {
+func (r *Response) Stringf(code int, fmts string, args ...any) {
 	switch {
 	case code < 300:
 		r.Original.WriteHeader(code)

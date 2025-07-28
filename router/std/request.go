@@ -1,9 +1,18 @@
 package stdrouter
 
-import "net/http"
+import (
+	"context"
+	"io"
+	"net/http"
+)
 
 type Request struct {
 	Original *http.Request
+	Response http.ResponseWriter
+}
+
+func (r *Request) Context() context.Context {
+	return r.Original.Context()
 }
 
 func (r *Request) PathParam(key string) (string, bool) {
@@ -14,4 +23,9 @@ func (r *Request) PathParam(key string) (string, bool) {
 
 func (r *Request) Headers() http.Header {
 	return r.Original.Header
+}
+
+func (r *Request) LimitedBody(limit uint) io.ReadCloser {
+	r.Original.Body = http.MaxBytesReader(r.Response, r.Original.Body, int64(limit))
+	return r.Original.Body
 }

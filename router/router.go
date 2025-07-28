@@ -3,25 +3,9 @@ package router
 import (
 	"io/fs"
 	"log/slog"
-	"net/http"
 )
 
 type Handler func(*RequestContext)
-
-type Request interface {
-	Headers() http.Header
-	PathParam(string) (string, bool)
-}
-
-type Response interface {
-	Status(int, ...string)
-	Statusf(int, string, ...any)
-}
-
-type RequestContext struct {
-	Request  Request
-	Response Response
-}
 
 type Route struct {
 	Method          string

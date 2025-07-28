@@ -59,15 +59,16 @@ func Build(b *router.Builder) http.Handler {
 func makeHandler(h router.Handler) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		h(&router.RequestContext{
-			Request:  wrapRequest(req),
+			Request:  wrapRequest(req, res),
 			Response: wrapResponse(res),
 		})
 	})
 }
 
-func wrapRequest(req *http.Request) router.Request {
+func wrapRequest(req *http.Request, res http.ResponseWriter) router.Request {
 	return &Request{
 		Original: req,
+		Response: res,
 	}
 }
 
