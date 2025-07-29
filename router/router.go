@@ -8,11 +8,10 @@ import (
 type Handler func(*RequestContext)
 
 type Route struct {
-	Method          string
-	Path            string
-	Handler         Handler
-	FileSystem      fs.FS
-	NotFoundHandler Handler
+	Method     string
+	Path       string
+	Handler    Handler
+	FileSystem fs.FS
 }
 
 type CORSOptions struct {

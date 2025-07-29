@@ -5,8 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/yandzee/go-svc/server/router"
-
 	"log/slog"
 )
 
@@ -19,7 +17,7 @@ const (
 type Server struct {
 	Addr    string
 	Kind    ProtocolKind
-	Router  router.Router
+	Router  http.Handler
 	Handler http.Handler
 	Log     *slog.Logger
 	SetupFn func(*http.Server)
@@ -57,16 +55,15 @@ func (srv *Server) Shutdown(ctx context.Context) error {
 
 func (srv *Server) setupHandler() (http.Handler, error) {
 	var handler http.Handler
-	var err error
 
 	switch {
 	case srv.Handler != nil:
 		handler = srv.Handler
 	case srv.Router != nil:
-		handler, err = srv.Router.Handler()
+		handler = srv.Router
 	}
 
-	return handler, err
+	return handler, nil
 }
 
 func (pk ProtocolKind) String() string {

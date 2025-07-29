@@ -2,6 +2,7 @@ package stdrouter
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/rs/cors"
@@ -54,6 +55,13 @@ func Build(b *router.Builder) http.Handler {
 	}
 
 	return handler
+}
+
+var LoggedNotFound = func(log *slog.Logger) router.Handler {
+	return func(rctx *router.RequestContext) {
+		log.Warn("resource is not found", "route", rctx.Request.URL().Path)
+		rctx.Response.String(http.StatusNotFound)
+	}
 }
 
 func makeHandler(h router.Handler) http.Handler {

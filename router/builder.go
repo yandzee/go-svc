@@ -15,8 +15,7 @@ import (
 const MethodAll = ""
 
 type Builder struct {
-	Handlers    map[string]map[string]Handler
-	HandlersFS  map[string]fs.FS
+	Routes      []Route
 	CORSEnabled bool
 	CORSOptions *CORSOptions
 }
@@ -26,43 +25,43 @@ func NewBuilder() Builder {
 }
 
 func (b *Builder) Get(p string, h Handler) {
-	b.ensureHandlers(http.MethodGet)[p] = h
+	b.ensureRoute(http.MethodGet, p, h)
 }
 
 func (b *Builder) Post(p string, h Handler) {
-	b.ensureHandlers(http.MethodPost)[p] = h
+	b.ensureRoute(http.MethodPost, p, h)
 }
 
 func (b *Builder) Put(p string, h Handler) {
-	b.ensureHandlers(http.MethodPut)[p] = h
+	b.ensureRoute(http.MethodPut, p, h)
 }
 
 func (b *Builder) Head(p string, h Handler) {
-	b.ensureHandlers(http.MethodHead)[p] = h
+	b.ensureRoute(http.MethodHead, p, h)
 }
 
 func (b *Builder) Options(p string, h Handler) {
-	b.ensureHandlers(http.MethodOptions)[p] = h
+	b.ensureRoute(http.MethodOptions, p, h)
 }
 
 func (b *Builder) Delete(p string, h Handler) {
-	b.ensureHandlers(http.MethodDelete)[p] = h
+	b.ensureRoute(http.MethodDelete, p, h)
 }
 
 func (b *Builder) Connect(p string, h Handler) {
-	b.ensureHandlers(http.MethodConnect)[p] = h
+	b.ensureRoute(http.MethodConnect, p, h)
 }
 
 func (b *Builder) Patch(p string, h Handler) {
-	b.ensureHandlers(http.MethodPatch)[p] = h
+	b.ensureRoute(http.MethodPatch, p, h)
 }
 
 func (b *Builder) Trace(p string, h Handler) {
-	b.ensureHandlers(http.MethodTrace)[p] = h
+	b.ensureRoute(http.MethodTrace, p, h)
 }
 
 func (b *Builder) All(p string, h Handler) {
-	b.ensureHandlers(MethodAll)[p] = h
+	b.ensureRoute(MethodAll, p, h)
 }
 
 func (b *Builder) Method(method, path string, handler Handler) {
@@ -85,6 +84,8 @@ func (b *Builder) Method(method, path string, handler Handler) {
 		b.Patch(path, handler)
 	case http.MethodTrace:
 		b.Trace(path, handler)
+	case MethodAll:
+		b.All(path, handler)
 	default:
 		panic(fmt.Sprintf("Router: unsupported method '%s' (path: '%s')", method, path))
 	}
@@ -118,33 +119,13 @@ func (b *Builder) CORS(enabled bool, maybeOpts ...CORSOptions) {
 }
 
 func (b *Builder) Files(p string, fs fs.FS) {
-	b.ensureFiles()[p] = fs
+	b.ensureFiles(p, fs)
 }
 
 func (b *Builder) IterRoutes() iter.Seq[*Route] {
 	return func(yield func(*Route) bool) {
-		for method, pathHandlers := range b.Handlers {
-			for path, handler := range pathHandlers {
-				r := Route{
-					Method:  method,
-					Path:    path,
-					Handler: handler,
-				}
-
-				if !yield(&r) {
-					return
-				}
-			}
-		}
-
-		for path, fs := range b.HandlersFS {
-			r := Route{
-				Method:     http.MethodGet,
-				Path:       path,
-				FileSystem: fs,
-			}
-
-			if !yield(&r) {
+		for i := range b.Routes {
+			if !yield(&b.Routes[i]) {
 				return
 			}
 		}
@@ -186,24 +167,44 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	return nil
 }
 
-func (b *Builder) ensureHandlers(method string) map[string]Handler {
-	if b.Handlers == nil {
-		b.Handlers = make(map[string]map[string]Handler)
+func (b *Builder) ensureRoute(method, path string, h Handler) {
+	for i := range b.Routes {
+		route := &b.Routes[i]
+
+		if route.Method != method || route.Path != path {
+			continue
+		}
+
+		route.FileSystem = nil
+		route.Handler = h
+
+		return
 	}
 
-	methodHandlers, ok := b.Handlers[method]
-	if ok {
-		return methodHandlers
-	}
-
-	b.Handlers[method] = make(map[string]Handler)
-	return b.Handlers[method]
+	b.Routes = append(b.Routes, Route{
+		Method:  method,
+		Path:    path,
+		Handler: h,
+	})
 }
 
-func (b *Builder) ensureFiles() map[string]fs.FS {
-	if b.HandlersFS == nil {
-		b.HandlersFS = make(map[string]fs.FS)
+func (b *Builder) ensureFiles(path string, f fs.FS) {
+	for i := range b.Routes {
+		route := &b.Routes[i]
+
+		if route.Path != path {
+			continue
+		}
+
+		route.Handler = nil
+		route.FileSystem = f
+
+		return
 	}
 
-	return b.HandlersFS
+	b.Routes = append(b.Routes, Route{
+		Method:     http.MethodGet,
+		Path:       path,
+		FileSystem: f,
+	})
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 type Request interface {
@@ -11,6 +12,7 @@ type Request interface {
 	Headers() http.Header
 	PathParam(string) (string, bool)
 	LimitedBody(uint) io.ReadCloser
+	URL() *url.URL
 }
 
 type Response interface {

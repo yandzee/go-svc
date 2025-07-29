@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"net/http"
+	"net/url"
 )
 
 type Request struct {
@@ -13,6 +14,10 @@ type Request struct {
 
 func (r *Request) Context() context.Context {
 	return r.Original.Context()
+}
+
+func (r *Request) URL() *url.URL {
+	return r.Original.URL
 }
 
 func (r *Request) PathParam(key string) (string, bool) {
