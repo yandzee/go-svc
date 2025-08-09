@@ -3,10 +3,13 @@ package stdrouter
 import (
 	"fmt"
 	"net/http"
+
+	"github.com/yandzee/go-svc/data/jsoner"
 )
 
 type Response struct {
 	Original http.ResponseWriter
+	Jsoner   *jsoner.Jsoner
 }
 
 func (r *Response) Write(d []byte) (int, error) {
@@ -43,4 +46,10 @@ func (r *Response) Stringf(code int, fmts string, args ...any) {
 	default:
 		http.Error(r.Original, fmt.Sprintf(fmts, args...), code)
 	}
+}
+
+func (r *Response) JSON(code int, d any) error {
+	r.Original.Header().Set("Content-Type", "application/json")
+
+	return r.Jsoner.Encode(r.Original, d)
 }

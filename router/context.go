@@ -18,6 +18,7 @@ type Request interface {
 type Response interface {
 	io.Writer
 	StringResponder
+	JSONResponder
 
 	Headers() http.Header
 }
@@ -25,6 +26,10 @@ type Response interface {
 type StringResponder interface {
 	String(int, ...string)
 	Stringf(int, string, ...any)
+}
+
+type JSONResponder interface {
+	JSON(_ int, d any) error
 }
 
 type RequestContext struct {

@@ -6,12 +6,15 @@ import (
 	"net/http"
 
 	"github.com/rs/cors"
+
+	"github.com/yandzee/go-svc/data/jsoner"
 	"github.com/yandzee/go-svc/router"
 )
 
 func Build(b *router.Builder) http.Handler {
 	mux := http.NewServeMux()
 	handler := http.Handler(mux)
+	jsoner := jsoner.Jsoner{}
 
 	for route := range b.IterRoutes() {
 		switch {
@@ -24,11 +27,11 @@ func Build(b *router.Builder) http.Handler {
 				),
 			)
 		case route.Method == router.MethodAll:
-			mux.Handle(route.Path, makeHandler(route.Handler))
+			mux.Handle(route.Path, makeHandler(route.Handler, &jsoner))
 		default:
 			mux.Handle(
 				fmt.Sprintf("%s %s", route.Method, route.Path),
-				makeHandler(route.Handler),
+				makeHandler(route.Handler, &jsoner),
 			)
 		}
 	}
@@ -64,11 +67,11 @@ var LoggedNotFound = func(log *slog.Logger) router.Handler {
 	}
 }
 
-func makeHandler(h router.Handler) http.Handler {
+func makeHandler(h router.Handler, j *jsoner.Jsoner) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		h(&router.RequestContext{
 			Request:  wrapRequest(req, res),
-			Response: wrapResponse(res),
+			Response: wrapResponse(res, j),
 		})
 	})
 }
@@ -80,8 +83,9 @@ func wrapRequest(req *http.Request, res http.ResponseWriter) router.Request {
 	}
 }
 
-func wrapResponse(w http.ResponseWriter) router.Response {
+func wrapResponse(w http.ResponseWriter, j *jsoner.Jsoner) router.Response {
 	return &Response{
 		Original: w,
+		Jsoner:   j,
 	}
 }

@@ -27,6 +27,7 @@ type RegistryProvider[U User] struct {
 type UsersRegistry[U User] interface {
 	CreateUser(context.Context, *UserStub) (CreateUserResult[U], error)
 	GetUserByUsername(context.Context, string) (*U, error)
+	GetUserById(context.Context, *uuid.UUID) (*U, error)
 	UserHasCredentials(
 		context.Context,
 		IdentityCore,
@@ -160,10 +161,26 @@ func (p *RegistryProvider[U]) Refresh(
 
 	userId, isOk := refreshToken.GetUserId()
 	if !isOk {
-		return TokenPair{}, errors.New("refresh token contains")
+		return TokenPair{}, errors.New("refresh token contains invalid user id")
 	}
 
 	return p.createSignedTokenPair(&userId)
+}
+
+func (p *RegistryProvider[U]) GetTokenUser(
+	ctx context.Context,
+	token *Token,
+) (*U, error) {
+	if token == nil {
+		return nil, errors.New("token is nil")
+	}
+
+	userId, isOk := token.GetUserId()
+	if !isOk {
+		return nil, errors.New("token contains invalid user id")
+	}
+
+	return p.Registry.GetUserById(ctx, &userId)
 }
 
 func (p *RegistryProvider[U]) createSignedTokenPair(userId *uuid.UUID) (TokenPair, error) {

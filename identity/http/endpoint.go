@@ -80,6 +80,50 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 	}
 }
 
+func (ep *IdentityEndpoint[U]) CurrentUser() router.Handler {
+	log := ep.log()
+
+	return func(rctx *router.RequestContext) {
+		pair, err := ep.tokensFromRequest(rctx.Request)
+		if err != nil {
+			log.Error("tokensFromRequest failure", "err", err.Error())
+
+			rctx.Response.String(
+				http.StatusInternalServerError,
+				"Auth check has failed: "+err.Error(),
+			)
+			return
+		}
+
+		if !pair.AccessToken.IsValid() {
+			rctx.Response.String(
+				http.StatusUnauthorized,
+				"CurrentUser: access token is either invalid or absent",
+			)
+
+			return
+		}
+
+		usr, err := ep.Provider.GetTokenUser(rctx.Context(), pair.AccessToken.Token)
+		if err != nil {
+			log.Error("GetTokenUser failure", "err", err.Error())
+
+			rctx.Response.String(
+				http.StatusInternalServerError,
+				"GetTokenUser: "+err.Error(),
+			)
+			return
+		}
+
+		if err := rctx.Response.JSON(http.StatusOK, usr); err != nil {
+			rctx.Response.String(
+				http.StatusInternalServerError,
+				err.Error(),
+			)
+		}
+	}
+}
+
 func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 	log := ep.log()
 
