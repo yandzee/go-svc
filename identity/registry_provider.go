@@ -3,8 +3,6 @@ package identity
 import (
 	"context"
 	"crypto/ecdsa"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -12,12 +10,12 @@ import (
 
 	jwt "github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/yandzee/go-svc/crypto"
 	"github.com/yandzee/go-svc/log"
 )
 
 type RegistryProvider[U User] struct {
 	Log      *slog.Logger
+	Core     IdentityCore
 	Registry UsersRegistry[U]
 
 	BaseClaims           jwt.RegisteredClaims
@@ -29,7 +27,12 @@ type RegistryProvider[U User] struct {
 type UsersRegistry[U User] interface {
 	CreateUser(context.Context, *UserStub) (CreateUserResult[U], error)
 	GetUserByUsername(context.Context, string) (*U, error)
-	UserHasCredentials(context.Context, *U, *PlainCredentials) (CredsCheckResult, error)
+	UserHasCredentials(
+		context.Context,
+		IdentityCore,
+		*U,
+		*PlainCredentials,
+	) (CredsCheckResult, error)
 }
 
 type CreateUserResult[U User] struct {
@@ -64,7 +67,7 @@ func (p *RegistryProvider[U]) SignIn(
 		}, nil
 	}
 
-	authCheck, err := p.Registry.UserHasCredentials(ctx, usr, creds)
+	authCheck, err := p.Registry.UserHasCredentials(ctx, p.ensureCore(), usr, creds)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +113,11 @@ func (p *RegistryProvider[U]) SignUp(
 		return nil, err
 	}
 
-	salt, pwdHash := p.salt(creds.Password)
+	core := p.ensureCore()
+
+	salt := core.GenerateSalt()
+	pwdHash := core.Salt(salt, creds.Password)
+
 	stub := UserStub{
 		Id:           userId,
 		Username:     creds.Username,
@@ -225,15 +232,15 @@ func (p *RegistryProvider[U]) mergeClaims(filler jwt.RegisteredClaims) jwt.Regis
 	return filler
 }
 
-func (p *RegistryProvider[U]) salt(smth string) (string, string) {
-	salt := crypto.RandomSha256(32)
-
-	h := sha256.New()
-	_, _ = fmt.Fprintf(h, "%s.%s", salt, smth)
-
-	return salt, hex.EncodeToString(h.Sum(nil))
-}
-
 func (p *RegistryProvider[U]) log() *slog.Logger {
 	return log.OrDiscard(p.Log)
+}
+
+func (p *RegistryProvider[U]) ensureCore() IdentityCore {
+	if p.Core != nil {
+		return p.Core
+	}
+
+	p.Core = &DefaultCore{}
+	return p.Core
 }

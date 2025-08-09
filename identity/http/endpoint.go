@@ -71,14 +71,11 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 				"CheckAuth: unexpected error: "+err.Error(),
 			)
 		default:
-			rctx.Response.String(http.StatusOK)
-			dur, err := pair.AccessToken.Token.Remaining()
-			if err == nil {
-				rctx.Response.Stringf(
-					http.StatusOK,
-					"CheckAuth: token is valid for duration: %s", dur,
-				)
-			}
+			dur, _ := pair.AccessToken.Token.Remaining()
+			rctx.Response.Stringf(
+				http.StatusOK,
+				"CheckAuth: token is valid for duration: %s", dur,
+			)
 		}
 	}
 }

@@ -12,6 +12,12 @@ type Provider[U User] interface {
 	Refresh(context.Context, *Token) (TokenPair, error)
 }
 
+type IdentityCore interface {
+	IsValid(*PlainCredentials) (string, bool)
+	GenerateSalt() string
+	Salt(string, string) string
+}
+
 type User interface {
 	GetId() uuid.UUID
 }
