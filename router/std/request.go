@@ -2,6 +2,7 @@ package stdrouter
 
 import (
 	"context"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -33,4 +34,17 @@ func (r *Request) Headers() http.Header {
 func (r *Request) LimitedBody(limit uint) io.ReadCloser {
 	r.Original.Body = http.MaxBytesReader(r.Response, r.Original.Body, int64(limit))
 	return r.Original.Body
+}
+
+func (r *Request) Cookie(name string) *http.Cookie {
+	c, err := r.Original.Cookie(name)
+	if errors.Is(err, http.ErrNoCookie) {
+		return nil
+	}
+
+	return c
+}
+
+func (r *Request) AllCookies() []*http.Cookie {
+	return r.Original.Cookies()
 }

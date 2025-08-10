@@ -152,6 +152,11 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			return
 		}
 
+		if t := signupResult.Tokens.AccessToken; t != nil {
+			cookie := t.AsCookie(ep.accessTokenHeaderName())
+			rctx.Response.SetCookie(&cookie)
+		}
+
 		_ = jsoner.Encode(rctx.Response, signupResult.AsPlain())
 	}
 }
@@ -187,6 +192,11 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			log.Error("Signin failed", "err", err.Error())
 			rctx.Response.Stringf(http.StatusInternalServerError, "Signin failed: %s", err.Error())
 			return
+		}
+
+		if t := signinResult.Tokens.AccessToken; t != nil {
+			cookie := t.AsCookie(ep.accessTokenHeaderName())
+			rctx.Response.SetCookie(&cookie)
 		}
 
 		_ = jsoner.Encode(rctx.Response, signinResult.AsPlain())
@@ -255,7 +265,11 @@ func (ep *IdentityEndpoint[U]) respondWithTokenPair(
 	headers := rctx.Response.Headers()
 
 	if token := pair.AccessToken; token != nil {
-		headers.Set(ep.accessTokenHeaderName(), token.JWTString)
+		hname := ep.accessTokenHeaderName()
+		headers.Set(hname, token.JWTString)
+
+		cookie := token.AsCookie(hname)
+		rctx.Response.SetCookie(&cookie)
 	}
 
 	if token := pair.RefreshToken; token != nil {
@@ -275,7 +289,17 @@ func (ep *IdentityEndpoint[U]) respondWithTokenPair(
 func (ep *IdentityEndpoint[U]) tokensFromRequest(r router.Request) (identity.ValidatedTokenPair, error) {
 	headers := r.Headers()
 
-	accessTokenHeader := headers.Get(ep.accessTokenHeaderName())
+	accessTokenHeaderName := ep.accessTokenHeaderName()
+	accessTokenHeader := headers.Get(accessTokenHeaderName)
+
+	if len(accessTokenHeader) == 0 {
+		accessTokenCookie := r.Cookie(accessTokenHeaderName)
+
+		if accessTokenCookie != nil {
+			accessTokenHeader = accessTokenCookie.Value
+		}
+	}
+
 	refreshTokenHeader := headers.Get(ep.refreshTokenHeaderName())
 
 	pair := identity.ValidatedTokenPair{}

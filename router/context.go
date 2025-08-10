@@ -10,6 +10,8 @@ import (
 type Request interface {
 	Context() context.Context
 	Headers() http.Header
+	Cookie(string) *http.Cookie
+	AllCookies() []*http.Cookie
 	PathParam(string) (string, bool)
 	LimitedBody(uint) io.ReadCloser
 	URL() *url.URL
@@ -22,6 +24,7 @@ type Response interface {
 
 	Headers() http.Header
 	Redirect(int, string)
+	SetCookie(*http.Cookie)
 }
 
 type StringResponder interface {

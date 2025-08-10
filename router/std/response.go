@@ -58,3 +58,7 @@ func (r *Response) JSON(code int, d any) error {
 func (r *Response) Redirect(code int, to string) {
 	http.Redirect(r.Original, r.Request, to, code)
 }
+
+func (r *Response) SetCookie(c *http.Cookie) {
+	http.SetCookie(r.Original, c)
+}

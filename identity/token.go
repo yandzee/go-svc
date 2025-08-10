@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"net/http"
 	"time"
 
 	jwt "github.com/golang-jwt/jwt/v5"
@@ -10,6 +11,29 @@ import (
 type Token struct {
 	JWT       *jwt.Token
 	JWTString string
+}
+
+func (t *Token) AsCookie(name string) http.Cookie {
+	val := t.JWTString
+	if len(val) == 0 {
+		val = t.JWT.Raw
+	}
+
+	remaining, _ := t.Remaining()
+	maxAge := int(remaining.Seconds())
+	if maxAge <= 0 {
+		maxAge = -1
+	}
+
+	return http.Cookie{
+		Name:     name,
+		Value:    val,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false,
+		SameSite: http.SameSiteStrictMode,
+		MaxAge:   maxAge,
+	}
 }
 
 func (t *Token) RawString() string {
