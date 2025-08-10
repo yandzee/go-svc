@@ -9,6 +9,7 @@ import (
 
 type Response struct {
 	Original http.ResponseWriter
+	Request  *http.Request
 	Jsoner   *jsoner.Jsoner
 }
 
@@ -52,4 +53,8 @@ func (r *Response) JSON(code int, d any) error {
 	r.Original.Header().Set("Content-Type", "application/json")
 
 	return r.Jsoner.Encode(r.Original, d)
+}
+
+func (r *Response) Redirect(code int, to string) {
+	http.Redirect(r.Original, r.Request, to, code)
 }

@@ -70,22 +70,15 @@ var LoggedNotFound = func(log *slog.Logger) router.Handler {
 func makeHandler(h router.Handler, j *jsoner.Jsoner) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		h(&router.RequestContext{
-			Request:  wrapRequest(req, res),
-			Response: wrapResponse(res, j),
+			Request: &Request{
+				Original: req,
+				Response: res,
+			},
+			Response: &Response{
+				Original: res,
+				Request:  req,
+				Jsoner:   j,
+			},
 		})
 	})
-}
-
-func wrapRequest(req *http.Request, res http.ResponseWriter) router.Request {
-	return &Request{
-		Original: req,
-		Response: res,
-	}
-}
-
-func wrapResponse(w http.ResponseWriter, j *jsoner.Jsoner) router.Response {
-	return &Response{
-		Original: w,
-		Jsoner:   j,
-	}
 }

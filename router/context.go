@@ -21,6 +21,7 @@ type Response interface {
 	JSONResponder
 
 	Headers() http.Header
+	Redirect(int, string)
 }
 
 type StringResponder interface {

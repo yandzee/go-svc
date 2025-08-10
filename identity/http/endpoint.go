@@ -84,38 +84,33 @@ func (ep *IdentityEndpoint[U]) CurrentUser() router.Handler {
 	log := ep.log()
 
 	return func(rctx *router.RequestContext) {
-		pair, err := ep.tokensFromRequest(rctx.Request)
+		result, err := ep.Guard(rctx, GuardOptions{
+			IsOptional:          false,
+			IsUserFetchDisabled: false,
+		})
+
 		if err != nil {
-			log.Error("tokensFromRequest failure", "err", err.Error())
+			if result.IsResponded {
+				return
+			}
+
+			log.Error("CurrentUser", "err", err.Error())
 
 			rctx.Response.String(
 				http.StatusInternalServerError,
-				"Auth check has failed: "+err.Error(),
-			)
-			return
-		}
-
-		if !pair.AccessToken.IsValid() {
-			rctx.Response.String(
-				http.StatusUnauthorized,
-				"CurrentUser: access token is either invalid or absent",
+				"Failed to get current authorization: "+err.Error(),
 			)
 
 			return
 		}
 
-		usr, err := ep.Provider.GetTokenUser(rctx.Context(), pair.AccessToken.Token)
-		if err != nil {
-			log.Error("GetTokenUser failure", "err", err.Error())
-
-			rctx.Response.String(
-				http.StatusInternalServerError,
-				"GetTokenUser: "+err.Error(),
-			)
+		if result.IsResponded {
 			return
 		}
 
-		if err := rctx.Response.JSON(http.StatusOK, usr); err != nil {
+		if err := rctx.Response.JSON(http.StatusOK, result.User); err != nil {
+			log.Error("Failed to respond with user's json", "err", err.Error())
+
 			rctx.Response.String(
 				http.StatusInternalServerError,
 				err.Error(),
