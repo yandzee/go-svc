@@ -152,11 +152,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			return
 		}
 
-		if t := signupResult.Tokens.AccessToken; t != nil {
-			cookie := t.AsCookie(ep.accessTokenHeaderName())
-			rctx.Response.SetCookie(&cookie)
-		}
-
+		ep.respondTokens(rctx, signupResult.Tokens.AccessToken, nil)
 		_ = jsoner.Encode(rctx.Response, signupResult.AsPlain())
 	}
 }
@@ -194,11 +190,7 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			return
 		}
 
-		if t := signinResult.Tokens.AccessToken; t != nil {
-			cookie := t.AsCookie(ep.accessTokenHeaderName())
-			rctx.Response.SetCookie(&cookie)
-		}
-
+		ep.respondTokens(rctx, signinResult.Tokens.AccessToken, nil)
 		_ = jsoner.Encode(rctx.Response, signinResult.AsPlain())
 
 		if signinResult.NotAuthorized {
@@ -247,7 +239,16 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 			return
 		}
 
-		if err := ep.respondWithTokenPair(rctx, &tokenPair); err != nil {
+		ep.respondTokens(rctx, tokenPair.AccessToken, tokenPair.RefreshToken)
+
+		_, err = fmt.Fprintf(
+			rctx.Response,
+			"Success: %d tokens, %s, have been placed to headers",
+			tokenPair.Num(),
+			tokenPair.Kinds(),
+		)
+
+		if err != nil {
 			rctx.Response.Stringf(
 				http.StatusInternalServerError,
 				"Refresh: failed to respond with new tokens: %s",
@@ -258,32 +259,24 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 	}
 }
 
-func (ep *IdentityEndpoint[U]) respondWithTokenPair(
+func (ep *IdentityEndpoint[U]) respondTokens(
 	rctx *router.RequestContext,
-	pair *identity.TokenPair,
-) error {
+	atoken *identity.Token,
+	rtoken *identity.Token,
+) {
 	headers := rctx.Response.Headers()
 
-	if token := pair.AccessToken; token != nil {
+	if atoken != nil {
 		hname := ep.accessTokenHeaderName()
-		headers.Set(hname, token.JWTString)
+		headers.Set(hname, atoken.JWTString)
 
-		cookie := token.AsCookie(hname)
+		cookie := atoken.AsCookie(hname)
 		rctx.Response.SetCookie(&cookie)
 	}
 
-	if token := pair.RefreshToken; token != nil {
-		headers.Set(ep.refreshTokenHeaderName(), token.JWTString)
+	if rtoken != nil {
+		headers.Set(ep.refreshTokenHeaderName(), rtoken.JWTString)
 	}
-
-	_, err := fmt.Fprintf(
-		rctx.Response,
-		"Success: %d tokens, %s, have been placed to headers",
-		pair.Num(),
-		pair.Kinds(),
-	)
-
-	return err
 }
 
 func (ep *IdentityEndpoint[U]) tokensFromRequest(r router.Request) (identity.ValidatedTokenPair, error) {
