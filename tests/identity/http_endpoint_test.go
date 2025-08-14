@@ -5,6 +5,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"testing"
+	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/yandzee/go-svc/identity"
@@ -16,20 +17,39 @@ const (
 	RefreshHeaderName = "X-Test-Refresh-Token"
 )
 
-func buildEndpoint(t *testing.T) *http.IdentityEndpoint[TestUser] {
+type TestDescriptor struct {
+	AccessTokenDuration  time.Duration
+	RefreshTokenDuration time.Duration
+	Users                []TestUser
+}
+
+func TestEndpointBuild(t *testing.T) {
+	_ = buildEndpoint(t, &TestDescriptor{
+		AccessTokenDuration:  time.Minute,
+		RefreshTokenDuration: time.Minute,
+	})
+}
+
+func buildEndpoint(t *testing.T, td *TestDescriptor) *http.IdentityEndpoint[TestUser] {
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		t.Fatalf("Failed to generate private key for IdentityEndpoint: %s", err.Error())
 	}
 
-	inMemRegistry := &MockUserRegistry{}
+	inMemRegistry := &MockUserRegistry{
+		Users: map[string]*TestUser{},
+	}
+
+	for _, usr := range td.Users {
+		inMemRegistry.Users[usr.Username] = &usr
+	}
 
 	provider := identity.RegistryProvider[TestUser]{
 		Registry:             inMemRegistry,
 		BaseClaims:           jwt.RegisteredClaims{},
 		TokenPrivateKey:      key,
-		AccessTokenDuration:  0,
-		RefreshTokenDuration: 0,
+		AccessTokenDuration:  td.AccessTokenDuration,
+		RefreshTokenDuration: td.RefreshTokenDuration,
 	}
 
 	return &http.IdentityEndpoint[TestUser]{
@@ -39,8 +59,4 @@ func buildEndpoint(t *testing.T) *http.IdentityEndpoint[TestUser] {
 		RefreshTokenHeader: RefreshHeaderName,
 		TokenPrivateKey:    key,
 	}
-}
-
-func TestEndpointBuild(t *testing.T) {
-	_ = buildEndpoint(t)
 }
