@@ -48,6 +48,19 @@ func TestAuthCheckRoute(t *testing.T) {
 						nil,
 					), makeRespChecker(http.StatusUnauthorized)
 				}),
+				StepFn(func() (*http.Request, ResponseCheckFn) {
+					return makeRequest(
+						t,
+						http.MethodGet,
+						AuthCheckURL,
+						identity.TokenPair{
+							AccessToken: &identity.Token{
+								JWTString: "not-a-jwt",
+							},
+						},
+						nil,
+					), makeRespChecker(http.StatusUnauthorized)
+				}),
 			},
 		},
 	})

@@ -19,6 +19,13 @@ func (t *Token) AsCookie(name string) http.Cookie {
 		val = t.JWT.Raw
 	}
 
+	if t.JWT == nil {
+		return http.Cookie{
+			Name:  name,
+			Value: val,
+		}
+	}
+
 	remaining, _ := t.Remaining()
 	maxAge := int(remaining.Seconds())
 	if maxAge <= 0 {
