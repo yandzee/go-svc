@@ -1,11 +1,9 @@
 package identity
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -29,79 +27,26 @@ type TestDescriptor struct {
 	AccessTokenDuration  time.Duration
 	RefreshTokenDuration time.Duration
 	Users                []TestUser
-	Steps                []StepFn
+	Steps                func(h *StepsHandle)
 }
-
-type ResponseCheckFn func(*testing.T, *httptest.ResponseRecorder)
-type StepFn func() (*http.Request, ResponseCheckFn)
 
 func TestAuthCheckRoute(t *testing.T) {
 	runTests(t, []TestDescriptor{
 		{
-			Steps: []StepFn{
-				StepFn(func() (*http.Request, ResponseCheckFn) {
-					return makeRequest(
-						t,
-						http.MethodGet,
-						AuthCheckURL,
-						identity.TokenPair{},
-						nil,
-					), makeRespChecker(http.StatusUnauthorized)
-				}),
-				StepFn(func() (*http.Request, ResponseCheckFn) {
-					return makeRequest(
-						t,
-						http.MethodGet,
-						AuthCheckURL,
-						identity.TokenPair{
-							AccessToken: &identity.Token{
-								JWTString: "not-a-jwt",
-							},
-						},
-						nil,
-					), makeRespChecker(http.StatusUnauthorized)
-				}),
+			Steps: func(h *StepsHandle) {
+				step := h.CheckAuth(identity.TokenPair{}, nil)
+				step.CheckUnauthorized()
+
+				step = h.CheckAuth(identity.TokenPair{
+					AccessToken: &identity.Token{
+						JWTString: "not-a-jwt",
+					},
+				}, nil)
+				step.CheckUnauthorized()
 			},
 		},
-	})
-}
-
-func makeRespChecker(status int) ResponseCheckFn {
-	return func(t *testing.T, rr *httptest.ResponseRecorder) {
-		if rr.Code != status {
-			t.Fatalf("RespChecker: expected status %d, but got %d", status, rr.Code)
-		}
-	}
-}
-
-func makeRequest(
-	t *testing.T,
-	method, url string,
-	tokens identity.TokenPair,
-	body any,
-) *http.Request {
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("makeRequest failed on body marshaling: %s", err.Error())
-	}
-
-	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		t.Fatalf("makeRequest failed on creaing new request: %s", err.Error())
-	}
-
-	if tokens.AccessToken != nil {
-		req.Header.Add(AccessHeaderName, tokens.AccessToken.JWTString)
-
-		c := tokens.AccessToken.AsCookie(AccessHeaderName)
-		req.AddCookie(&c)
-	}
-
-	if tokens.RefreshToken != nil {
-		req.Header.Add(RefreshHeaderName, tokens.RefreshToken.JWTString)
-	}
-
-	return req
+	},
+	)
 }
 
 func runTests(t *testing.T, tests []TestDescriptor) {
@@ -109,12 +54,17 @@ func runTests(t *testing.T, tests []TestDescriptor) {
 		ep := buildEndpoint(t, &td)
 		router := buildEndpointRouter(ep)
 
-		for _, stepFn := range td.Steps {
-			resp := httptest.NewRecorder()
-			req, respChecker := stepFn()
+		stepsHandle := &StepsHandle{
+			t: t,
+		}
 
-			router.ServeHTTP(resp, req)
-			respChecker(t, resp)
+		td.Steps(stepsHandle)
+
+		for _, step := range stepsHandle.steps {
+			resp := httptest.NewRecorder()
+
+			router.ServeHTTP(resp, step.Request)
+			step.ResponseCheckFn(t, resp)
 		}
 	}
 }
