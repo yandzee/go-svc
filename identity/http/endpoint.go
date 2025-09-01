@@ -72,6 +72,14 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 			)
 		default:
 			dur, _ := pair.AccessToken.Token.Remaining()
+
+			var rtoken *identity.Token = nil
+			if pair.RefreshToken != nil {
+				rtoken = pair.RefreshToken.Token
+			}
+
+			ep.respondTokens(rctx, pair.AccessToken.Token, rtoken)
+
 			rctx.Response.Stringf(
 				http.StatusOK,
 				"CheckAuth: token is valid for duration: %s", dur,

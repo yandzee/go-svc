@@ -3,6 +3,7 @@ package http
 import (
 	"net/http"
 
+	"github.com/google/uuid"
 	"github.com/yandzee/go-svc/identity"
 	"github.com/yandzee/go-svc/router"
 )
@@ -12,7 +13,7 @@ type GuardOptions struct {
 	IsUserFetchDisabled bool
 }
 
-type GuardResult[U any] struct {
+type GuardResult[U identity.User] struct {
 	User        *U
 	Tokens      identity.ValidatedTokenPair
 	IsResponded bool
@@ -78,4 +79,12 @@ func (ep *IdentityEndpoint[U]) Guard(
 
 func (gr *GuardResult[U]) IsAuthorized() bool {
 	return gr.Tokens.HasValidAccess() && (gr.Options.IsOptional || gr.User != nil)
+}
+
+func (gr *GuardResult[U]) GetUserId() (uuid.UUID, bool) {
+	if gr.User != nil {
+		return (*gr.User).GetId(), true
+	}
+
+	return gr.Tokens.UserId()
 }
