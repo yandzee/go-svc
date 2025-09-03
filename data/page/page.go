@@ -24,6 +24,13 @@ type PaginationMeta struct {
 	TotalEntries int `json:"totalEntries"`
 }
 
+func (p *Page[T]) SetSingle(data []T) {
+	p.Data = data
+
+	sel := Entire()
+	p.FillMeta(&sel, len(data))
+}
+
 func (p *Page[T]) FillMeta(sel *Selector, total int) {
 	p.Meta.Fill(sel, total)
 	p.Meta.CurrentPageSize = len(p.Data)
