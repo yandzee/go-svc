@@ -10,6 +10,8 @@ import (
 
 type GuardOptions struct {
 	IsOptional          bool
+	RedirectCode        int
+	RedirectTo          string
 	IsUserFetchDisabled bool
 }
 
@@ -47,10 +49,14 @@ func (ep *IdentityEndpoint[U]) Guard(
 	result.Tokens = pair
 
 	if !result.Options.IsOptional && !pair.HasValidAccess() {
-		rctx.Response.String(
-			http.StatusUnauthorized,
-			"CurrentUser: access token is either invalid or absent",
-		)
+		if code := result.Options.RedirectCode; code != 0 {
+			rctx.Response.Redirect(code, result.Options.RedirectTo)
+		} else {
+			rctx.Response.String(
+				http.StatusUnauthorized,
+				"AuthGuard access token is either invalid or absent",
+			)
+		}
 
 		result.IsResponded = true
 		return result, nil
