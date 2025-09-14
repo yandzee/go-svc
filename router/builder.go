@@ -1,12 +1,11 @@
 package router
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"iter"
 	"net/http"
-	"net/url"
+	"strings"
 
 	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/log"
@@ -132,24 +131,13 @@ func (b *Builder) IterRoutes() iter.Seq[*Route] {
 	}
 }
 
-func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
+func (b *Builder) Extend(routes iter.Seq[*Route], prefixes ...string) error {
 	for route := range routes {
 		path := route.Path
 
-		if len(prefix) > 0 {
-			_path, err := url.JoinPath(prefix[0], route.Path)
-			if err != nil {
-				return errors.Join(
-					fmt.Errorf(
-						"failed to join route paths: '%s' and '%s'",
-						prefix[0],
-						route.Path,
-					),
-					err,
-				)
-			}
-
-			path = _path
+		if len(prefixes) > 0 {
+			prefix := prefixes[0]
+			path = b.joinPathParts(prefix, path)
 		}
 
 		if route.FileSystem != nil {
@@ -165,6 +153,21 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefix ...string) error {
 	}
 
 	return nil
+}
+
+func (b *Builder) joinPathParts(p, q string) string {
+	switch {
+	case strings.HasSuffix(p, "/"):
+		if !strings.HasPrefix(q, "/") {
+			return p + q
+		}
+
+		return p + strings.TrimLeft(q, "/")
+	case strings.HasPrefix(q, "/"):
+		return p + q
+	default:
+		return p + "/" + q
+	}
 }
 
 func (b *Builder) ensureRoute(method, path string, h Handler) {
