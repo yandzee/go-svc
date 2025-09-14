@@ -9,18 +9,25 @@ import (
 	slogzerolog "github.com/samber/slog-zerolog/v2"
 )
 
-func Init(lvl slog.Level, isProduction bool) *slog.Logger {
+type LoggerOptions struct {
+	Level        slog.Level
+	IsStructured bool
+	IsColored    bool
+}
+
+func Init(opts LoggerOptions) *slog.Logger {
 	zerologLogger := zerolog.New(os.Stdout)
 
-	if !isProduction {
+	if !opts.IsStructured {
 		zerologLogger = zerolog.New(zerolog.ConsoleWriter{
 			Out:        os.Stdout,
 			TimeFormat: time.DateTime,
-		})
+			NoColor:    !opts.IsColored,
+		}).Level(intoZerologLevel(opts.Level))
 	}
 
 	slogHandler := slogzerolog.Option{
-		Level:     lvl,
+		Level:     opts.Level,
 		Logger:    &zerologLogger,
 		AddSource: false,
 	}.NewZerologHandler()
@@ -28,4 +35,19 @@ func Init(lvl slog.Level, isProduction bool) *slog.Logger {
 	logger := slog.New(slogHandler)
 
 	return logger
+}
+
+func intoZerologLevel(lvl slog.Level) zerolog.Level {
+	switch lvl {
+	case slog.LevelDebug:
+		return zerolog.DebugLevel
+	case slog.LevelInfo:
+		return zerolog.InfoLevel
+	case slog.LevelWarn:
+		return zerolog.WarnLevel
+	case slog.LevelError:
+		return zerolog.ErrorLevel
+	}
+
+	return zerolog.DebugLevel
 }
