@@ -33,7 +33,7 @@ type StringResponder interface {
 }
 
 type JSONResponder interface {
-	JSON(_ int, d any) error
+	JSON(int, any) error
 }
 
 type RequestContext struct {

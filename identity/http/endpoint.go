@@ -160,8 +160,8 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			return
 		}
 
-		ep.respondTokens(rctx, signupResult.Tokens.AccessToken, nil)
-		_ = jsoner.Encode(rctx.Response, signupResult.AsPlain())
+		ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
+		_ = rctx.Response.JSON(http.StatusOK, signupResult.AsPlain())
 	}
 }
 
@@ -198,12 +198,13 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			return
 		}
 
-		ep.respondTokens(rctx, signinResult.Tokens.AccessToken, nil)
-		_ = jsoner.Encode(rctx.Response, signinResult.AsPlain())
-
 		if signinResult.NotAuthorized {
 			rctx.Response.String(http.StatusUnauthorized)
+			return
 		}
+
+		ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
+		_ = rctx.Response.JSON(http.StatusOK, signinResult.AsPlain())
 	}
 }
 
