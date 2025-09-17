@@ -52,6 +52,10 @@ func (r *Response) Stringf(code int, fmts string, args ...any) {
 func (r *Response) JSON(code int, d any) error {
 	r.Original.Header().Set("Content-Type", "application/json")
 
+	if code != 0 {
+		r.Original.WriteHeader(code)
+	}
+
 	return r.Jsoner.Encode(r.Original, d)
 }
 

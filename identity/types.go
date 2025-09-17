@@ -25,10 +25,11 @@ type SigninResult[U User] struct {
 }
 
 type PlainSigninResult[U User] struct {
-	User          *U              `json:"user"`
-	UserNotFound  bool            `json:"userNotFound"`
-	NotAuthorized bool            `json:"notAuthorized"`
-	Tokens        StringTokenPair `json:"tokens"`
+	User               *U              `json:"user"`
+	UserNotFound       bool            `json:"userNotFound"`
+	NotAuthorized      bool            `json:"notAuthorized"`
+	InvalidCredentials bool            `json:"invalidCredentials"`
+	Tokens             StringTokenPair `json:"tokens"`
 }
 
 type UserStub struct {
@@ -49,9 +50,10 @@ func (r *SignupResult[U]) AsPlain() PlainSignupResult[U] {
 
 func (r *SigninResult[U]) AsPlain() PlainSigninResult[U] {
 	return PlainSigninResult[U]{
-		User:          r.User,
-		UserNotFound:  r.UserNotFound,
-		NotAuthorized: r.NotAuthorized,
-		Tokens:        r.Tokens.AsStringPair(),
+		User:               r.User,
+		UserNotFound:       r.UserNotFound,
+		NotAuthorized:      r.NotAuthorized,
+		InvalidCredentials: r.InvalidCredentials,
+		Tokens:             r.Tokens.AsStringPair(),
 	}
 }

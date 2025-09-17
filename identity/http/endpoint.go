@@ -185,11 +185,6 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 		}
 
 		log.Debug("Signin", "credentials", creds)
-		if msg, ok := creds.IsValid(); !ok {
-			log.Debug("Signin invalid credentials", "msg", msg)
-			rctx.Response.Stringf(http.StatusBadRequest, "Invalid signin credentials: %s", msg)
-			return
-		}
 
 		signinResult, err := ep.Provider.SignIn(rctx.Context(), &creds)
 		if err != nil {
@@ -197,6 +192,8 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			rctx.Response.Stringf(http.StatusInternalServerError, "Signin failed: %s", err.Error())
 			return
 		}
+
+		log.Debug("Signin result", "result", signinResult)
 
 		st := http.StatusOK
 		if signinResult.NotAuthorized {

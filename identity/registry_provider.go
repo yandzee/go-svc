@@ -54,7 +54,10 @@ func (p *RegistryProvider[U]) SignIn(
 	}
 
 	if _, ok := creds.IsValid(); !ok {
-		return nil, errors.New("cannot signin using invalid credentials")
+		return &SigninResult[U]{
+			NotAuthorized:      true,
+			InvalidCredentials: true,
+		}, nil
 	}
 
 	usr, err := p.Registry.GetUserByUsername(ctx, creds.Username)
