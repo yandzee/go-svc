@@ -198,13 +198,14 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			return
 		}
 
+		st := http.StatusOK
 		if signinResult.NotAuthorized {
-			rctx.Response.String(http.StatusUnauthorized)
-			return
+			st = http.StatusUnauthorized
+		} else {
+			ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
 		}
 
-		ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
-		_ = rctx.Response.JSON(http.StatusOK, signinResult.AsPlain())
+		_ = rctx.Response.JSON(st, signinResult.AsPlain())
 	}
 }
 

@@ -64,7 +64,8 @@ func (p *RegistryProvider[U]) SignIn(
 
 	if usr == nil {
 		return &SigninResult[U]{
-			UserNotFound: true,
+			NotAuthorized: true,
+			UserNotFound:  true,
 		}, nil
 	}
 
@@ -75,7 +76,8 @@ func (p *RegistryProvider[U]) SignIn(
 
 	if authCheck.IsWrongPassword {
 		return &SigninResult[U]{
-			NotAuthorized: true,
+			NotAuthorized:      true,
+			InvalidCredentials: true,
 		}, nil
 	}
 

@@ -17,10 +17,11 @@ type PlainSignupResult[U any] struct {
 }
 
 type SigninResult[U User] struct {
-	User          *U        `json:"user"`
-	UserNotFound  bool      `json:"userNotFound"`
-	NotAuthorized bool      `json:"notAuthorized"`
-	Tokens        TokenPair `json:"tokens"`
+	User               *U        `json:"user"`
+	UserNotFound       bool      `json:"userNotFound"`
+	NotAuthorized      bool      `json:"notAuthorized"`
+	InvalidCredentials bool      `json:"invalidCredentials"`
+	Tokens             TokenPair `json:"tokens"`
 }
 
 type PlainSigninResult[U User] struct {
