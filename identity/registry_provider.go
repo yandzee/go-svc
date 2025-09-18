@@ -53,13 +53,6 @@ func (p *RegistryProvider[U]) SignIn(
 		return nil, errors.New("cannot signin using nil credentials")
 	}
 
-	if _, ok := creds.IsValid(); !ok {
-		return &SigninResult[U]{
-			NotAuthorized:      true,
-			InvalidCredentials: true,
-		}, nil
-	}
-
 	usr, err := p.Registry.GetUserByUsername(ctx, creds.Username)
 	if err != nil {
 		return nil, err
