@@ -5,15 +5,17 @@ import (
 )
 
 type SignupResult[U User] struct {
-	User          *U        `json:"user"`
-	AlreadyExists bool      `json:"alreadyExists"`
-	Tokens        TokenPair `json:"tokens"`
+	User               *U        `json:"user"`
+	AlreadyExists      bool      `json:"alreadyExists"`
+	InvalidCredentials bool      `json:"invalidCredentials"`
+	Tokens             TokenPair `json:"tokens"`
 }
 
 type PlainSignupResult[U any] struct {
-	User          *U              `json:"user"`
-	AlreadyExists bool            `json:"alreadyExists"`
-	Tokens        StringTokenPair `json:"tokens"`
+	User               *U              `json:"user"`
+	AlreadyExists      bool            `json:"alreadyExists"`
+	InvalidCredentials bool            `json:"invalidCredentials"`
+	Tokens             StringTokenPair `json:"tokens"`
 }
 
 type SigninResult[U User] struct {
@@ -42,9 +44,10 @@ type UserStub struct {
 
 func (r *SignupResult[U]) AsPlain() PlainSignupResult[U] {
 	return PlainSignupResult[U]{
-		User:          r.User,
-		AlreadyExists: r.AlreadyExists,
-		Tokens:        r.Tokens.AsStringPair(),
+		User:               r.User,
+		AlreadyExists:      r.AlreadyExists,
+		InvalidCredentials: r.InvalidCredentials,
+		Tokens:             r.Tokens.AsStringPair(),
 	}
 }
 

@@ -104,7 +104,9 @@ func (p *RegistryProvider[U]) SignUp(
 	}
 
 	if _, ok := creds.IsValid(); !ok {
-		return nil, errors.New("cannot signup using invalid credentials")
+		return &SignupResult[U]{
+			InvalidCredentials: true,
+		}, nil
 	}
 
 	userId, err := uuid.NewV7()
