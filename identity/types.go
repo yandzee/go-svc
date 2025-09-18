@@ -4,59 +4,31 @@ import (
 	"github.com/google/uuid"
 )
 
-type SignupResult[U User] struct {
-	User               *U        `json:"user"`
-	AlreadyExists      bool      `json:"alreadyExists"`
-	InvalidCredentials bool      `json:"invalidCredentials"`
-	Tokens             TokenPair `json:"tokens"`
+type SignupRequest struct {
+	Credentials Credentials `json:"credentials"`
 }
 
-type PlainSignupResult[U any] struct {
-	User               *U              `json:"user"`
-	AlreadyExists      bool            `json:"alreadyExists"`
-	InvalidCredentials bool            `json:"invalidCredentials"`
-	Tokens             StringTokenPair `json:"tokens"`
+type SigninRequest SignupRequest
+
+type SignupResult[U User] struct {
+	User               *U               `json:"user"`
+	AlreadyExists      bool             `json:"alreadyExists"`
+	InvalidCredentials bool             `json:"invalidCredentials"`
+	CredentialsCheck   CredentialsCheck `json:"credentialsCheck"`
+	Tokens             TokenPair        `json:"tokens"`
 }
 
 type SigninResult[U User] struct {
-	User               *U        `json:"user"`
-	UserNotFound       bool      `json:"userNotFound"`
-	NotAuthorized      bool      `json:"notAuthorized"`
-	InvalidCredentials bool      `json:"invalidCredentials"`
-	Tokens             TokenPair `json:"tokens"`
-}
-
-type PlainSigninResult[U User] struct {
-	User               *U              `json:"user"`
-	UserNotFound       bool            `json:"userNotFound"`
-	NotAuthorized      bool            `json:"notAuthorized"`
-	InvalidCredentials bool            `json:"invalidCredentials"`
-	Tokens             StringTokenPair `json:"tokens"`
+	User                *U               `json:"user"`
+	NotAuthorized       bool             `json:"notAuthorized"`
+	UserNotFound        bool             `json:"userNotFound"`
+	CredentialsMismatch bool             `json:"credentialsMismatch"`
+	InvalidCredentials  bool             `json:"invalidCredentials"`
+	CredentialsCheck    CredentialsCheck `json:"credentialsCheck"`
+	Tokens              TokenPair        `json:"tokens"`
 }
 
 type UserStub struct {
-	Id           uuid.UUID `json:"id"`
-	Username     string    `json:"username"`
-	Password     string    `json:"-"`
-	Salt         string    `json:"-"`
-	PasswordHash string    `json:"-"`
-}
-
-func (r *SignupResult[U]) AsPlain() PlainSignupResult[U] {
-	return PlainSignupResult[U]{
-		User:               r.User,
-		AlreadyExists:      r.AlreadyExists,
-		InvalidCredentials: r.InvalidCredentials,
-		Tokens:             r.Tokens.AsStringPair(),
-	}
-}
-
-func (r *SigninResult[U]) AsPlain() PlainSigninResult[U] {
-	return PlainSigninResult[U]{
-		User:               r.User,
-		UserNotFound:       r.UserNotFound,
-		NotAuthorized:      r.NotAuthorized,
-		InvalidCredentials: r.InvalidCredentials,
-		Tokens:             r.Tokens.AsStringPair(),
-	}
+	Id          uuid.UUID   `json:"id"`
+	Credentials Credentials `json:"credentials"`
 }

@@ -15,7 +15,6 @@ import (
 
 type RegistryProvider[U User] struct {
 	Log      *slog.Logger
-	Core     IdentityCore
 	Registry UsersRegistry[U]
 
 	BaseClaims           jwt.RegisteredClaims
@@ -24,36 +23,20 @@ type RegistryProvider[U User] struct {
 	RefreshTokenDuration time.Duration
 }
 
-type UsersRegistry[U User] interface {
-	CreateUser(context.Context, *UserStub) (CreateUserResult[U], error)
-	GetUserByUsername(context.Context, string) (*U, error)
-	GetUserById(context.Context, *uuid.UUID) (*U, error)
-	UserHasCredentials(
-		context.Context,
-		IdentityCore,
-		*U,
-		*PlainCredentials,
-	) (CredsCheckResult, error)
-}
-
 type CreateUserResult[U User] struct {
 	AlreadyExists bool
 	User          *U
 }
 
-type CredsCheckResult struct {
-	IsWrongPassword bool
-}
-
 func (p *RegistryProvider[U]) SignIn(
 	ctx context.Context,
-	creds *PlainCredentials,
+	req SigninRequest,
 ) (*SigninResult[U], error) {
-	if creds == nil {
+	if req.Credentials == nil {
 		return nil, errors.New("cannot signin using nil credentials")
 	}
 
-	usr, err := p.Registry.GetUserByUsername(ctx, creds.Username)
+	usr, err := p.Registry.GetUserByCredentials(ctx, req.Credentials)
 	if err != nil {
 		return nil, err
 	}
@@ -65,12 +48,12 @@ func (p *RegistryProvider[U]) SignIn(
 		}, nil
 	}
 
-	authCheck, err := p.Registry.UserHasCredentials(ctx, p.ensureCore(), usr, creds)
+	has, err := p.Registry.UserHasCredentials(ctx, usr, req.Credentials)
 	if err != nil {
 		return nil, err
 	}
 
-	if authCheck.IsWrongPassword {
+	if !has {
 		return &SigninResult[U]{
 			NotAuthorized:      true,
 			InvalidCredentials: true,
@@ -93,9 +76,9 @@ func (p *RegistryProvider[U]) SignIn(
 
 func (p *RegistryProvider[U]) SignUp(
 	ctx context.Context,
-	creds *PlainCredentials,
+	req SignupRequest,
 ) (*SignupResult[U], error) {
-	if creds == nil {
+	if req.Credentials == nil {
 		return nil, errors.New("cannot signup using nil request")
 	}
 
@@ -103,9 +86,12 @@ func (p *RegistryProvider[U]) SignUp(
 		return nil, errors.New("cannot signup using nil UsersRegistry")
 	}
 
-	if _, ok := creds.IsValid(); !ok {
+	if ch, err := p.Registry.CheckFieldsCorrectness(ctx, req.Credentials); err != nil {
+		return nil, err
+	} else if _, has := ch.HasIncorrect(); has {
 		return &SignupResult[U]{
 			InvalidCredentials: true,
+			CredentialsCheck:   ch,
 		}, nil
 	}
 
@@ -114,17 +100,9 @@ func (p *RegistryProvider[U]) SignUp(
 		return nil, err
 	}
 
-	core := p.ensureCore()
-
-	salt := core.GenerateSalt()
-	pwdHash := core.Salt(salt, creds.Password)
-
 	stub := UserStub{
-		Id:           userId,
-		Username:     creds.Username,
-		Salt:         salt,
-		Password:     creds.Password,
-		PasswordHash: pwdHash,
+		Id:          userId,
+		Credentials: req.Credentials,
 	}
 
 	createResult, err := p.Registry.CreateUser(ctx, &stub)
@@ -251,13 +229,4 @@ func (p *RegistryProvider[U]) mergeClaims(filler jwt.RegisteredClaims) jwt.Regis
 
 func (p *RegistryProvider[U]) log() *slog.Logger {
 	return log.OrDiscard(p.Log)
-}
-
-func (p *RegistryProvider[U]) ensureCore() IdentityCore {
-	if p.Core != nil {
-		return p.Core
-	}
-
-	p.Core = &DefaultCore{}
-	return p.Core
 }

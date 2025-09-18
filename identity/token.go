@@ -81,3 +81,8 @@ func (t *Token) GetUserId() (uuid.UUID, bool) {
 
 	return uid, true
 }
+
+// Implements json.Marshaler
+func (t *Token) MarshalJSON() ([]byte, error) {
+	return []byte(t.RawString()), nil
+}

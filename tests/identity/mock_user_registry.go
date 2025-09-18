@@ -25,7 +25,9 @@ func (mr *MockUserRegistry) CreateUser(
 	ctx context.Context,
 	us *identity.UserStub,
 ) (identity.CreateUserResult[TestUser], error) {
-	usr, exists := mr.Users[us.Username]
+	username, pwd := us.Credentials.Get("username"), us.Credentials.Get("password")
+
+	usr, exists := mr.Users[username]
 	if exists {
 		return identity.CreateUserResult[TestUser]{
 			User:          usr,
@@ -35,8 +37,8 @@ func (mr *MockUserRegistry) CreateUser(
 
 	usr = &TestUser{
 		Id:       uuid.New(),
-		Username: us.Username,
-		Password: us.Password,
+		Username: username,
+		Password: pwd,
 	}
 
 	mr.Users[usr.Username] = usr
@@ -46,11 +48,12 @@ func (mr *MockUserRegistry) CreateUser(
 	}, nil
 }
 
-func (mr *MockUserRegistry) GetUserByUsername(
-	ctx context.Context, username string,
+func (mr *MockUserRegistry) GetUserByCredentials(
+	ctx context.Context, creds identity.Credentials,
 ) (*TestUser, error) {
-	return mr.Users[username], nil
+	return mr.Users[creds.Get("username")], nil
 }
+
 func (mr *MockUserRegistry) GetUserById(
 	ctx context.Context, id *uuid.UUID,
 ) (*TestUser, error) {
@@ -65,11 +68,26 @@ func (mr *MockUserRegistry) GetUserById(
 
 func (mr *MockUserRegistry) UserHasCredentials(
 	ctx context.Context,
-	core identity.IdentityCore,
 	usr *TestUser,
-	creds *identity.PlainCredentials,
-) (identity.CredsCheckResult, error) {
-	return identity.CredsCheckResult{
-		IsWrongPassword: usr.Password != creds.Password,
+	creds identity.Credentials,
+) (bool, error) {
+	return usr.Password == creds.Get("password"), nil
+}
+
+func (mr *MockUserRegistry) CheckFieldsCorrectness(
+	ctx context.Context,
+	creds identity.Credentials,
+) (identity.CredentialsCheck, error) {
+	username, pwd := creds.Get("username"), creds.Get("password")
+
+	return identity.CredentialsCheck{
+		"username": identity.FieldCheck{
+			IsCorrect: len(username) > 0,
+			Details:   "`username` should be non empty",
+		},
+		"password": identity.FieldCheck{
+			IsCorrect: len(pwd) > 0,
+			Details:   "`password` should be non empty",
+		},
 	}, nil
 }

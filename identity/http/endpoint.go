@@ -131,7 +131,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 	log := ep.log()
 
 	return func(rctx *router.RequestContext) {
-		signupRequest := identity.PlainCredentials{}
+		signupRequest := identity.SignupRequest{}
 		jsoner := jsoner.Jsoner{}
 
 		res := jsoner.Decode(rctx.Request.LimitedBody(16*KiloByte), &signupRequest)
@@ -147,13 +147,8 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 		}
 
 		log.Debug("Signup", "request", signupRequest)
-		if msg, ok := signupRequest.IsValid(); !ok {
-			log.Debug("Signup invalid credentials", "msg", msg)
-			rctx.Response.String(http.StatusBadRequest, msg)
-			return
-		}
 
-		signupResult, err := ep.Provider.SignUp(rctx.Context(), &signupRequest)
+		signupResult, err := ep.Provider.SignUp(rctx.Context(), signupRequest)
 		if err != nil {
 			log.Error("Signup failed", "err", err.Error())
 			rctx.Response.Stringf(http.StatusInternalServerError, "Signup failure: %s", err.Error())
@@ -161,7 +156,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 		}
 
 		ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
-		_ = rctx.Response.JSON(http.StatusOK, signupResult.AsPlain())
+		_ = rctx.Response.JSON(http.StatusOK, signupResult)
 	}
 }
 
@@ -169,10 +164,10 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 	log := ep.log()
 
 	return func(rctx *router.RequestContext) {
-		creds := identity.PlainCredentials{}
+		signinRequest := identity.SigninRequest{}
 		jsoner := jsoner.Jsoner{}
 
-		res := jsoner.Decode(rctx.Request.LimitedBody(16*KiloByte), &creds)
+		res := jsoner.Decode(rctx.Request.LimitedBody(16*KiloByte), &signinRequest)
 		if err := res.Err(); err != nil {
 			log.Error("Signin body parse failure", "err", err.Error())
 			rctx.Response.Stringf(
@@ -184,9 +179,9 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			return
 		}
 
-		log.Debug("Signin", "credentials", creds)
+		log.Debug("Signin", "signinRequest", signinRequest)
 
-		signinResult, err := ep.Provider.SignIn(rctx.Context(), &creds)
+		signinResult, err := ep.Provider.SignIn(rctx.Context(), signinRequest)
 		if err != nil {
 			log.Error("Signin failed", "err", err.Error())
 			rctx.Response.Stringf(http.StatusInternalServerError, "Signin failed: %s", err.Error())
@@ -202,7 +197,7 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
 		}
 
-		_ = rctx.Response.JSON(st, signinResult.AsPlain())
+		_ = rctx.Response.JSON(st, signinResult)
 	}
 }
 
