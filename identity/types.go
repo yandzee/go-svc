@@ -32,3 +32,7 @@ type UserStub struct {
 	Id          uuid.UUID   `json:"id"`
 	Credentials Credentials `json:"credentials"`
 }
+
+func (r *SignupResult[U]) IsSuccess() bool {
+	return r.User != nil && !r.AlreadyExists && !r.InvalidCredentials
+}

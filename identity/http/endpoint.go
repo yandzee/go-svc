@@ -155,7 +155,10 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			return
 		}
 
-		ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
+		if signupResult.IsSuccess() {
+			ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
+		}
+
 		_ = rctx.Response.JSON(http.StatusOK, signupResult)
 	}
 }
