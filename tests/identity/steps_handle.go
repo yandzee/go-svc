@@ -25,16 +25,24 @@ type ResponseCheckFn func(*testing.T, *httptest.ResponseRecorder)
 
 func (sh *StepsHandle) CheckAuth(tokens identity.TokenPair, body any) *Step {
 	step := &Step{
-		Request:         makeRequest(sh.t, http.MethodGet, AuthCheckURL, tokens, body),
-		ResponseCheckFn: nil,
+		Request: sh.Request(http.MethodGet, AuthCheckURL, tokens, body),
 	}
 
 	sh.steps = append(sh.steps, step)
 	return step
 }
 
-func (s *Step) CheckUnauthorized() {
-	s.ResponseCheckFn = makeRespChecker(http.StatusUnauthorized)
+func (sh *StepsHandle) Signin(creds identity.Credentials) *Step {
+	step := &Step{
+		Request: sh.Request(http.MethodPost, SigninURL, identity.TokenPair{}, identity.SigninRequest{}),
+	}
+
+	sh.steps = append(sh.steps, step)
+	return step
+}
+
+func (s *Step) ExpectStatus(statusCode int) {
+	s.ResponseCheckFn = makeRespChecker(statusCode)
 }
 
 func makeRespChecker(status int) ResponseCheckFn {
@@ -45,12 +53,13 @@ func makeRespChecker(status int) ResponseCheckFn {
 	}
 }
 
-func makeRequest(
-	t *testing.T,
+func (sh *StepsHandle) Request(
 	method, url string,
 	tokens identity.TokenPair,
 	body any,
 ) *http.Request {
+	t := sh.t
+
 	bodyBytes, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("makeRequest failed on body marshaling: %s", err.Error())

@@ -2,9 +2,12 @@ package identity
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
 )
+
+var ErrNoCredentials = errors.New("no credentials")
 
 type Provider[U User] interface {
 	SignIn(context.Context, SigninRequest) (*SigninResult[U], error)

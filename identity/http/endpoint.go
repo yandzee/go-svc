@@ -185,7 +185,11 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 		log.Debug("Signin", "signinRequest", signinRequest)
 
 		signinResult, err := ep.Provider.SignIn(rctx.Context(), signinRequest)
-		if err != nil {
+		switch {
+		case errors.Is(err, identity.ErrNoCredentials):
+			rctx.Response.String(http.StatusBadRequest, "Signin failed: no credentials provided")
+			return
+		case err != nil:
 			log.Error("Signin failed", "err", err.Error())
 			rctx.Response.Stringf(http.StatusInternalServerError, "Signin failed: %s", err.Error())
 			return

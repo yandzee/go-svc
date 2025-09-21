@@ -33,7 +33,7 @@ func (p *RegistryProvider[U]) SignIn(
 	req SigninRequest,
 ) (*SigninResult[U], error) {
 	if req.Credentials == nil {
-		return nil, errors.New("cannot signin using nil credentials")
+		return nil, ErrNoCredentials
 	}
 
 	usr, err := p.Registry.GetUserByCredentials(ctx, req.Credentials)
@@ -79,7 +79,7 @@ func (p *RegistryProvider[U]) SignUp(
 	req SignupRequest,
 ) (*SignupResult[U], error) {
 	if req.Credentials == nil {
-		return nil, errors.New("cannot signup using nil request")
+		return nil, ErrNoCredentials
 	}
 
 	if p.Registry == nil {

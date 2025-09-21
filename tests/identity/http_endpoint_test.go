@@ -21,6 +21,7 @@ const (
 	RefreshHeaderName = "X-Test-Refresh-Token"
 
 	AuthCheckURL = "/auth"
+	SigninURL    = "/auth/signin"
 )
 
 type TestDescriptor struct {
@@ -35,18 +36,29 @@ func TestAuthCheckRoute(t *testing.T) {
 		{
 			Steps: func(h *StepsHandle) {
 				step := h.CheckAuth(identity.TokenPair{}, nil)
-				step.CheckUnauthorized()
+				step.ExpectStatus(http.StatusUnauthorized)
 
 				step = h.CheckAuth(identity.TokenPair{
 					AccessToken: &identity.Token{
 						JWTString: "not-a-jwt",
 					},
 				}, nil)
-				step.CheckUnauthorized()
+				step.ExpectStatus(http.StatusUnauthorized)
 			},
 		},
 	},
 	)
+}
+
+func TestSigninRoute(t *testing.T) {
+	runTests(t, []TestDescriptor{
+		{
+			Steps: func(h *StepsHandle) {
+				step := h.Signin(nil)
+				step.ExpectStatus(http.StatusBadRequest)
+			},
+		},
+	})
 }
 
 func runTests(t *testing.T, tests []TestDescriptor) {
@@ -75,7 +87,7 @@ func buildEndpointRouter(ep *id_http.IdentityEndpoint[TestUser]) http.Handler {
 	r.Get(AuthCheckURL, ep.Check())
 	r.Get("/auth/user", ep.CurrentUser())
 	r.Post("/auth/signup", ep.Signup())
-	r.Post("/auth/signin", ep.Signin())
+	r.Post(SigninURL, ep.Signin())
 	r.Post("/auth/refresh", ep.Refresh())
 
 	return stdrouter.Build(&r)
