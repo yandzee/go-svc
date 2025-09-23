@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -84,5 +85,7 @@ func (t *Token) GetUserId() (uuid.UUID, bool) {
 
 // Implements json.Marshaler
 func (t *Token) MarshalJSON() ([]byte, error) {
-	return []byte(t.RawString()), nil
+	str := fmt.Sprintf("\"%s\"", t.RawString())
+
+	return []byte(str), nil
 }
