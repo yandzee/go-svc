@@ -55,8 +55,8 @@ func (p *RegistryProvider[U]) SignIn(
 
 	if !has {
 		return &SigninResult[U]{
-			NotAuthorized:      true,
-			InvalidCredentials: true,
+			NotAuthorized:       true,
+			CredentialsMismatch: true,
 		}, nil
 	}
 
