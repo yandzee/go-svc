@@ -12,7 +12,7 @@ type ControllableInstance interface {
 	Shutdown(context.Context) error
 }
 
-func PrepareAndRun(ctx context.Context, instance ControllableInstance) {
+func Start(ctx context.Context, instance ControllableInstance) {
 	host := &Host{
 		Instance: instance,
 	}
