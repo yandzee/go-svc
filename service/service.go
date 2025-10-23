@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"os"
+
+	"github.com/yandzee/go-svc/lifecycle"
 )
 
 type ControllableInstance interface {
+	lifecycle.Runnable
+
 	Prepare(context.Context) error
-	Run(context.Context) error
 	Shutdown(context.Context) error
 }
 
