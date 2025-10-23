@@ -11,15 +11,34 @@ type Runnable interface {
 
 type Runnables map[string]Runnable
 
+type RunFn = func(context.Context) error
+type RunFns map[string]RunFn
+
 type RunTermination struct {
 	Name string
 	Err  error
 }
 
+type TerminationHandlerFn func(*RunTermination) bool
+
 func RunParallel(
 	ctx context.Context,
 	runners map[string]Runnable,
-	terminationHandler func(*RunTermination) bool,
+	terminationHandler TerminationHandlerFn,
+) error {
+	fns := make(RunFns, len(runners))
+
+	for k, runable := range runners {
+		fns[k] = runable.Run
+	}
+
+	return RunParallelFn(ctx, fns, terminationHandler)
+}
+
+func RunParallelFn(
+	ctx context.Context,
+	runners RunFns,
+	terminationHandler TerminationHandlerFn,
 ) error {
 	if len(runners) == 0 {
 		return nil
@@ -30,11 +49,11 @@ func RunParallel(
 
 	termCh := make(chan RunTermination)
 
-	for name, runnable := range runners {
+	for name, run := range runners {
 		go func() {
 			termCh <- RunTermination{
 				Name: name,
-				Err:  runnable.Run(ctx),
+				Err:  run(ctx),
 			}
 		}()
 	}
@@ -59,5 +78,5 @@ func RunParallel(
 		err = errors.Join(err, term.Err)
 	}
 
-	return nil
+	return err
 }
