@@ -19,6 +19,7 @@ type RunTermination struct {
 	Err  error
 }
 
+// NOTE: Returns true if other runs should be stopped
 type TerminationHandlerFn func(*RunTermination) bool
 
 func RunParallel(
@@ -68,11 +69,6 @@ func RunParallelFn(
 		shouldAbort := terminationHandler(&term)
 		if shouldAbort {
 			cancel()
-			return term.Err
-		}
-
-		if term.Err == nil {
-			continue
 		}
 
 		err = errors.Join(err, term.Err)
