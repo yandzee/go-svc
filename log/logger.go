@@ -7,6 +7,7 @@ import (
 
 	"github.com/rs/zerolog"
 	slogzerolog "github.com/samber/slog-zerolog/v2"
+	"github.com/yandzee/go-svc/crypto"
 )
 
 type LoggerOptions struct {
@@ -32,7 +33,8 @@ func Init(opts LoggerOptions) *slog.Logger {
 		AddSource: false,
 	}.NewZerologHandler()
 
-	logger := slog.New(slogHandler)
+	instanceId := crypto.RandomHex(4)
+	logger := slog.New(slogHandler).With("iid", instanceId)
 
 	return logger
 }

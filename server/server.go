@@ -39,18 +39,35 @@ func (srv *Server) Run(ctx context.Context) error {
 	srv.Log.Info("running listener", "addr", srv.Addr, "kind", srv.Kind.String())
 	srv.listener = listener
 
-	err = listener.Serve()
+	errCh := make(chan error)
+	go func() {
+		errCh <- listener.Serve()
+	}()
+
+	select {
+	case err = <-errCh:
+	case <-ctx.Done():
+		sherr := listener.Shutdown(ctx)
+		err = errors.Join(err, sherr, <-errCh)
+	}
 
 	if errors.Is(err, http.ErrServerClosed) {
-		srv.Log.Debug("Serve terminates with ErrServerClosed")
 		return nil
 	}
 
-	return err
+	return errors.Join(err, ctx.Err())
 }
 
 func (srv *Server) Shutdown(ctx context.Context) error {
-	return srv.listener.Shutdown(ctx)
+	l := srv.listener
+	if l == nil {
+		return nil
+	}
+
+	err := l.Shutdown(ctx)
+	srv.listener = nil
+
+	return err
 }
 
 func (srv *Server) setupHandler() (http.Handler, error) {

@@ -19,6 +19,9 @@ type Host struct {
 	Instance           ControllableInstance
 	Log                *slog.Logger
 	TerminationTimeout time.Duration
+
+	shutdownCh   chan struct{}
+	shutdownOnce sync.Once
 }
 
 func (h *Host) Prepare(ctx context.Context) error {
@@ -47,6 +50,9 @@ func (h *Host) Run(ctx context.Context) error {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
+	h.shutdownCh = make(chan struct{})
+	h.shutdownOnce = sync.Once{}
+
 	ctx, cancel := context.WithCancel(ctx)
 	signalCh := h.setupSignalHandling(ctx, &wg)
 
@@ -64,6 +70,7 @@ func (h *Host) Run(ctx context.Context) error {
 		instanceReturned = true
 		instanceErr = err
 	case <-signalCh:
+	case <-h.shutdownCh:
 	case <-ctx.Done():
 	}
 
@@ -89,6 +96,18 @@ func (h *Host) Run(ctx context.Context) error {
 	}
 
 	return ctx.Err()
+}
+
+func (h *Host) Shutdown(ctx context.Context) error {
+	if h.Instance == nil || h.shutdownCh == nil {
+		return nil
+	}
+
+	h.shutdownOnce.Do(func() {
+		close(h.shutdownCh)
+	})
+
+	return nil
 }
 
 func (h *Host) setupSignalHandling(ctx context.Context, wg *sync.WaitGroup) chan struct{} {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha1"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"hash"
 )
 
@@ -22,6 +23,10 @@ func RandomSha1(nbytes uint32) string {
 
 func RandomSha256(nbytes uint32) string {
 	return RandomHash(nbytes, sha256.New())
+}
+
+func RandomHex(nbytes uint32) string {
+	return fmt.Sprintf("%x", RandomBytes(nbytes))
 }
 
 func RandomHash(nbytes uint32, h hash.Hash) string {
