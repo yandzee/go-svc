@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 
 	"github.com/yandzee/go-svc/lifecycle"
@@ -18,13 +19,14 @@ type ControllableInstance interface {
 func Start(ctx context.Context, instance ControllableInstance) {
 	host := &Host{
 		Instance: instance,
+		Log:      slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{})),
 	}
 
 	if err := host.Prepare(ctx); err != nil {
 		ExitOnError(err, 1)
 	}
 
-	if err := host.Run(); err != nil {
+	if err := host.Run(ctx); err != nil {
 		ExitOnError(err, 2)
 	}
 

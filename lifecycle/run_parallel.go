@@ -14,32 +14,33 @@ type Runnables map[string]Runnable
 type RunFn = func(context.Context) error
 type RunFns map[string]RunFn
 
-type RunTermination struct {
-	Name string
-	Err  error
+type TerminationContext struct {
+	Name          string
+	Err           error
+	CancelContext context.CancelFunc
 }
 
 // NOTE: Returns true if other runs should be stopped
-type TerminationHandlerFn func(*RunTermination) bool
+type TerminationHandlerFn func(*TerminationContext)
 
 func RunParallel(
 	ctx context.Context,
 	runners map[string]Runnable,
-	terminationHandler TerminationHandlerFn,
+	terminationHandler ...TerminationHandlerFn,
 ) error {
 	fns := make(RunFns, len(runners))
 
-	for k, runable := range runners {
-		fns[k] = runable.Run
+	for k, runnable := range runners {
+		fns[k] = runnable.Run
 	}
 
-	return RunParallelFn(ctx, fns, terminationHandler)
+	return RunParallelFn(ctx, fns, terminationHandler...)
 }
 
 func RunParallelFn(
 	ctx context.Context,
 	runners RunFns,
-	terminationHandler TerminationHandlerFn,
+	terminationHandler ...TerminationHandlerFn,
 ) error {
 	if len(runners) == 0 {
 		return nil
@@ -48,13 +49,14 @@ func RunParallelFn(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	termCh := make(chan RunTermination)
+	termCh := make(chan TerminationContext)
 
 	for name, run := range runners {
 		go func() {
-			termCh <- RunTermination{
-				Name: name,
-				Err:  run(ctx),
+			termCh <- TerminationContext{
+				Name:          name,
+				Err:           run(ctx),
+				CancelContext: cancel,
 			}
 		}()
 	}
@@ -66,9 +68,8 @@ func RunParallelFn(
 		term := <-termCh
 		nterminated += 1
 
-		shouldAbort := terminationHandler(&term)
-		if shouldAbort {
-			cancel()
+		if len(terminationHandler) > 0 {
+			terminationHandler[0](&term)
 		}
 
 		err = errors.Join(err, term.Err)

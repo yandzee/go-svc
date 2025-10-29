@@ -13,27 +13,23 @@ import (
 	"github.com/yandzee/go-svc/log"
 )
 
-type Host struct {
-	Instance ControllableInstance
-	Log      *slog.Logger
+const DefaultTerminationTimeout = 5 * time.Second
 
-	ctx    context.Context
-	cancel context.CancelFunc
-	wg     sync.WaitGroup
+type Host struct {
+	Instance           ControllableInstance
+	Log                *slog.Logger
+	TerminationTimeout time.Duration
 }
 
-func (h *Host) Prepare(_ctx context.Context) error {
+func (h *Host) Prepare(ctx context.Context) error {
 	if h.Instance == nil {
 		return fmt.Errorf("service.Host: Instance field must be set")
 	}
 
-	ctx, cancel := context.WithCancel(_ctx)
+	h.Log = log.OrDiscard(h.Log)
 
-	h.ctx = ctx
-	h.cancel = cancel
-
-	if err := h.setupSignalHandlers(); err != nil {
-		return err
+	if h.TerminationTimeout <= 0 {
+		h.TerminationTimeout = DefaultTerminationTimeout
 	}
 
 	if err := h.Instance.Prepare(ctx); err != nil {
@@ -43,92 +39,84 @@ func (h *Host) Prepare(_ctx context.Context) error {
 	return nil
 }
 
-func (h *Host) Run() error {
+func (h *Host) Run(ctx context.Context) error {
 	if h.Instance == nil {
-		return fmt.Errorf("nothing to run")
+		return fmt.Errorf("instance is not set")
 	}
 
-	if h.ctx == nil {
-		return fmt.Errorf("host.Prepare() must be called first")
+	wg := sync.WaitGroup{}
+	wg.Add(1)
+
+	ctx, cancel := context.WithCancel(ctx)
+	signalCh := h.setupSignalHandling(ctx, &wg)
+
+	var instanceErr error
+	instanceReturned := false
+	errCh := make(chan error)
+
+	// NOTE: We are not sure if instance.Run is going to return timely...
+	go func() {
+		errCh <- h.Instance.Run(ctx)
+	}()
+
+	select {
+	case err := <-errCh:
+		instanceReturned = true
+		instanceErr = err
+	case <-signalCh:
+	case <-ctx.Done():
 	}
 
-	err := h.Instance.Run(h.ctx)
+	// NOTE: ...so we notify everyone that music is about to stop.
+	cancel()
 
-	// This .Wait() prevents goroutine (maybe main) from exiting before other
-	// control goroutines do
-	h.wg.Wait()
+	// NOTE: Wait for the signal goroutine to return
+	wg.Wait()
 
-	return err
+	if instanceReturned {
+		return instanceErr
+	}
+
+	h.Log.Warn(
+		"Waiting instance to return before forced return",
+		"delay", h.TerminationTimeout.String(),
+	)
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-time.After(h.TerminationTimeout):
+	}
+
+	return ctx.Err()
 }
 
-func (h *Host) setupSignalHandlers() error {
-	c := make(chan os.Signal, 32)
+func (h *Host) setupSignalHandling(ctx context.Context, wg *sync.WaitGroup) chan struct{} {
+	ch := make(chan os.Signal, 32)
+	signalCh := make(chan struct{})
+
+	go func() {
+		select {
+		case sig := <-ch:
+			h.Log.Warn("os signal received", "sig", sig.String())
+		case <-ctx.Done():
+			h.Log.Warn("os signal monitoring done", "err", ctx.Err())
+		}
+
+		signal.Stop(ch)
+		close(signalCh)
+
+		h.Log.Debug("exitting signal handler loop")
+		wg.Done()
+	}()
+
 	signal.Notify(
-		c,
+		ch,
 		syscall.SIGINT,
 		syscall.SIGHUP,
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 	)
 
-	go func() {
-		defer signal.Stop(c)
-		defer h.log().Debug("exitting signal handler loop")
-
-	F:
-		for {
-			select {
-			case sig := <-c:
-
-				if shouldBreak := h.handleSignal(sig); shouldBreak {
-					break F
-				}
-			case <-h.ctx.Done():
-				break F
-			}
-		}
-	}()
-
-	return h.ctx.Err()
-}
-
-func (h *Host) handleSignal(sig os.Signal) bool {
-	h.wg.Add(1)
-
-	log := h.log().With("sig", sig.String())
-	log.Warn("handling received OS signal")
-
-	log.Warn("cancelling root context")
-	h.cancel()
-
-	log.Warn("running graceful shutdown on ServiceHost impl")
-
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	// Inner.Shutdown() will switch Goroutine to the main thread, which after
-	// exitting terminates all remaining goroutines, including one where
-	// Inner.Shutdown is running, so we have to block the execution artificially
-	defer h.wg.Done()
-
-	err := h.Instance.Shutdown(ctx)
-	attrs := []any{}
-	lvl := slog.LevelInfo
-
-	if err != nil {
-		attrs = append(attrs, slog.String("err", err.Error()))
-		lvl = slog.LevelError
-	}
-
-	log.Log(ctx, lvl, "graceful shutdown finished", attrs...)
-	return true
-}
-
-func (h *Host) log() *slog.Logger {
-	if h.Log != nil {
-		return h.Log
-	}
-
-	h.Log = log.Discard()
-	return h.Log
+	return signalCh
 }
