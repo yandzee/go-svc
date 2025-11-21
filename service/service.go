@@ -3,9 +3,11 @@ package service
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 
 	"github.com/yandzee/go-svc/lifecycle"
+	"github.com/yandzee/go-svc/log"
 )
 
 type ControllableInstance interface {
@@ -15,7 +17,51 @@ type ControllableInstance interface {
 	Shutdown(context.Context) error
 }
 
-func Start(ctx context.Context, instance ControllableInstance) {
+type HostableService[C any] interface {
+	ControllableInstance
+
+	SetLogger(*slog.Logger)
+	SetConfig(C)
+}
+
+type ServiceConfig interface {
+	LogOptions() log.LoggerOptions
+	LogRecords() []slog.Record
+}
+
+func Start[C any](ctx context.Context, svc HostableService[C], cfg C) {
+	var logger *slog.Logger
+
+	if cfg, ok := any(cfg).(ServiceConfig); ok {
+		logger = log.Init(cfg.LogOptions())
+
+		hasFatal := false
+		for _, logRecord := range cfg.LogRecords() {
+			if err := logger.Handler().Handle(ctx, logRecord); err != nil {
+				panic(err.Error())
+			}
+
+			hasFatal = hasFatal || logRecord.Level == slog.LevelError
+		}
+
+		if hasFatal {
+			ExitOnError(errors.New("start: config has errors"), 1)
+		}
+	} else {
+		logger = log.Init(log.LoggerOptions{
+			Level:        slog.LevelDebug,
+			IsStructured: false,
+			IsColored:    true,
+		})
+	}
+
+	svc.SetLogger(logger)
+	svc.SetConfig(cfg)
+
+	StartInstance(ctx, svc)
+}
+
+func StartInstance(ctx context.Context, instance ControllableInstance) {
 	if err := instance.Prepare(ctx); err != nil {
 		ExitOnError(err, 1)
 	}
