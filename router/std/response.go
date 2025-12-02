@@ -58,9 +58,14 @@ func (r *Response) JSON(code int, d any, opts ...router.RespondOptions) (int, er
 	hs.Set("Content-Type", "application/json")
 
 	buf := bytes.Buffer{}
+	wr := bufio.NewWriter(&buf)
 
-	err := r.Jsoner.Encode(bufio.NewWriter(&buf), d)
+	err := r.Jsoner.Encode(wr, d)
 	if err != nil {
+		return 0, err
+	}
+
+	if err := wr.Flush(); err != nil {
 		return 0, err
 	}
 
