@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/log"
+	httputils "github.com/yandzee/go-svc/utils/http"
 )
 
 const MethodAll = ""

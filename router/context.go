@@ -32,8 +32,12 @@ type StringResponder interface {
 	Stringf(int, string, ...any)
 }
 
+type RespondOptions struct {
+	Chunked bool
+}
+
 type JSONResponder interface {
-	JSON(int, any) error
+	JSON(int, any, ...RespondOptions) (int, error)
 }
 
 type RequestContext struct {

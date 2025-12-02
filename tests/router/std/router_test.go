@@ -8,9 +8,9 @@ import (
 
 	"testing/fstest"
 
-	"github.com/yandzee/go-svc/httputils"
 	"github.com/yandzee/go-svc/router"
 	stdrouter "github.com/yandzee/go-svc/router/std"
+	httputils "github.com/yandzee/go-svc/utils/http"
 )
 
 const (

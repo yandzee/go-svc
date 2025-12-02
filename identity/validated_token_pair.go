@@ -2,7 +2,7 @@ package identity
 
 import (
 	"github.com/google/uuid"
-	"github.com/yandzee/go-svc/jwtutils"
+	jwtutils "github.com/yandzee/go-svc/utils/jwt"
 )
 
 type ValidatedToken struct {

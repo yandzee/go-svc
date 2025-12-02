@@ -10,9 +10,9 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/yandzee/go-svc/data/jsoner"
 	"github.com/yandzee/go-svc/identity"
-	"github.com/yandzee/go-svc/jwtutils"
 	"github.com/yandzee/go-svc/log"
 	"github.com/yandzee/go-svc/router"
+	jwtutils "github.com/yandzee/go-svc/utils/jwt"
 )
 
 const (
@@ -116,7 +116,7 @@ func (ep *IdentityEndpoint[U]) CurrentUser() router.Handler {
 			return
 		}
 
-		if err := rctx.Response.JSON(http.StatusOK, result.User); err != nil {
+		if _, err := rctx.Response.JSON(http.StatusOK, result.User); err != nil {
 			log.Error("Failed to respond with user's json", "err", err.Error())
 
 			rctx.Response.String(
@@ -159,7 +159,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 			ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
 		}
 
-		_ = rctx.Response.JSON(http.StatusOK, signupResult)
+		_, _ = rctx.Response.JSON(http.StatusOK, signupResult)
 	}
 }
 
@@ -204,7 +204,7 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 			ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
 		}
 
-		_ = rctx.Response.JSON(st, signinResult)
+		_, _ = rctx.Response.JSON(st, signinResult)
 	}
 }
 

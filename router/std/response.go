@@ -1,10 +1,14 @@
 package stdrouter
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/yandzee/go-svc/data/jsoner"
+	"github.com/yandzee/go-svc/router"
 )
 
 type Response struct {
@@ -49,14 +53,26 @@ func (r *Response) Stringf(code int, fmts string, args ...any) {
 	}
 }
 
-func (r *Response) JSON(code int, d any) error {
-	r.Original.Header().Set("Content-Type", "application/json")
+func (r *Response) JSON(code int, d any, opts ...router.RespondOptions) (int, error) {
+	hs := r.Original.Header()
+	hs.Set("Content-Type", "application/json")
+
+	buf := bytes.Buffer{}
+
+	err := r.Jsoner.Encode(bufio.NewWriter(&buf), d)
+	if err != nil {
+		return 0, err
+	}
+
+	nbytes := buf.Len()
+	hs.Set("Content-Length", strconv.Itoa(nbytes))
 
 	if code != 0 {
 		r.Original.WriteHeader(code)
 	}
 
-	return r.Jsoner.Encode(r.Original, d)
+	_, err = r.Original.Write(buf.Bytes())
+	return nbytes, err
 }
 
 func (r *Response) Redirect(code int, to string) {
