@@ -7,11 +7,17 @@ import (
 )
 
 type EntryResult struct {
-	// NOTE: For path "/d1/d2/f1.dat", Path is "/d1/d2/f1.dat", DirPath is "/d1/d2", Name is "f1.dat"
-	Path  string
-	Dir   string
-	Entry fs.DirEntry
-	Err   error
+	// NOTE: For path "/d1/d2/f1.dat" and start argument "d1":
+	// Path is "/d1/d2/f1.dat"
+	// DirPath is "/d1/d2"
+	// Name is "f1.dat"
+	// StartDir is "d1"
+
+	Path     string
+	Dir      string
+	StartDir string
+	Entry    fs.DirEntry
+	Err      error
 }
 
 // NOTE: Breadth First Search over `fsys`
@@ -22,6 +28,8 @@ func ScanDir(fsys fs.FS, start ...string) iter.Seq[EntryResult] {
 		dirs[0] = start[0]
 	}
 
+	startDir := dirs[0]
+
 	return func(yield func(EntryResult) bool) {
 		for len(dirs) > 0 {
 			dir := dirs[0]
@@ -30,9 +38,10 @@ func ScanDir(fsys fs.FS, start ...string) iter.Seq[EntryResult] {
 			entries, err := fs.ReadDir(fsys, dir)
 			if err != nil {
 				if !yield(EntryResult{
-					Err:  err,
-					Path: dir,
-					Dir:  dir,
+					Err:      err,
+					Path:     dir,
+					Dir:      dir,
+					StartDir: startDir,
 				}) {
 					return
 				}
@@ -44,9 +53,10 @@ func ScanDir(fsys fs.FS, start ...string) iter.Seq[EntryResult] {
 				entryPath := filepath.Join(dir, entry.Name())
 
 				if !yield(EntryResult{
-					Path:  entryPath,
-					Dir:   dir,
-					Entry: entry,
+					Path:     entryPath,
+					Dir:      dir,
+					Entry:    entry,
+					StartDir: startDir,
 				}) {
 					return
 				}
