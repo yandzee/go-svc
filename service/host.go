@@ -81,20 +81,29 @@ func (h *Host) Run(ctx context.Context) error {
 	wg.Wait()
 
 	if instanceReturned {
+		h.Log.Info("instance.Run finished", "err", instanceErr)
 		return instanceErr
 	}
 
 	h.Log.Warn(
-		"Waiting instance to return before forced return",
-		"delay", h.TerminationTimeout.String(),
+		"instance.Run is awaiting for termination",
+		"timeout", h.TerminationTimeout.String(),
 	)
 
+	waitStart := time.Now()
 	select {
 	case err := <-errCh:
+		h.Log.Info(
+			"instance.Run terminated gracefully after slight delay",
+			"delay", time.Since(waitStart).String(),
+			"err", err,
+		)
+
 		return err
 	case <-time.After(h.TerminationTimeout):
 	}
 
+	h.Log.Warn("instance.Run did not finish timely, force termination")
 	return ctx.Err()
 }
 
@@ -117,6 +126,9 @@ func (h *Host) setupSignalHandling(ctx context.Context, wg *sync.WaitGroup) chan
 	go func() {
 		select {
 		case sig := <-ch:
+			// Suppress signal char in stdout
+			fmt.Print("\r")
+
 			h.Log.Warn("os signal received", "sig", sig.String())
 		case <-ctx.Done():
 			h.Log.Warn("os signal monitoring done", "err", ctx.Err())

@@ -58,7 +58,10 @@ func Start[C any](ctx context.Context, svc HostableService[C], cfg C) {
 	svc.SetLogger(logger)
 	svc.SetConfig(cfg)
 
-	StartInstance(ctx, svc)
+	StartInstance(ctx, &Host{
+		Instance: svc,
+		Log:      logger.With("log", "service.Host"),
+	})
 }
 
 func StartInstance(ctx context.Context, instance ControllableInstance) {
