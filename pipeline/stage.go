@@ -12,7 +12,7 @@ type Stage[A any] interface {
 }
 
 type Result[A any] struct {
-	Stage   Stage[A]     `json:"state"`
+	Stage   Stage[A]     `json:"stage"`
 	Control flow.Control `json:"control"`
 	Args    A            `json:"args"`
 }
@@ -29,16 +29,16 @@ func Run[A any](init Stage[A], args A) Result[A] {
 		return result
 	}
 
-	lastStateId := init.Id()
+	lastStageId := init.Id()
 	init.OnEnter()
 
 	for result.Control == flow.Continue {
 		stage := result.Stage
 		id := stage.Id()
 
-		if lastStateId != id {
+		if lastStageId != id {
 			stage.OnEnter()
-			lastStateId = id
+			lastStageId = id
 		}
 
 		result = stage.Act(result.Args)
