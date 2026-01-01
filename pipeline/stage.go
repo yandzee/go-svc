@@ -7,8 +7,9 @@ type Stage[A any] interface {
 
 	Act(A) Result[A]
 
-	OnEnter()
-	OnExit(Result[A])
+	// NOTE: These hooks receive previous / next stage ids
+	OnEnter(string)
+	OnExit(string)
 }
 
 type Result[A any] struct {
@@ -30,14 +31,14 @@ func Run[A any](init Stage[A], args A) Result[A] {
 	}
 
 	lastStageId := init.Id()
-	init.OnEnter()
+	init.OnEnter(lastStageId)
 
 	for result.Control == flow.Continue {
 		stage := result.Stage
 		id := stage.Id()
 
 		if lastStageId != id {
-			stage.OnEnter()
+			stage.OnEnter(lastStageId)
 			lastStageId = id
 		}
 
@@ -48,8 +49,8 @@ func Run[A any](init Stage[A], args A) Result[A] {
 			break
 		}
 
-		if result.Stage.Id() != id {
-			stage.OnExit(result)
+		if nextStageId := result.Stage.Id(); nextStageId != id {
+			stage.OnExit(nextStageId)
 		}
 	}
 
