@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/yandzee/go-svc/data/jsoner"
 	"github.com/yandzee/go-svc/router"
@@ -86,4 +87,15 @@ func (r *Response) Redirect(code int, to string) {
 
 func (r *Response) SetCookie(c *http.Cookie) {
 	http.SetCookie(r.Original, c)
+}
+
+func (r *Response) MaxAge(dur time.Duration) {
+	r.Original.Header().Set(
+		"Cache-Control",
+		fmt.Sprintf("max-age=%d", int(dur.Seconds())),
+	)
+}
+
+func (r *Response) ETag(tag string) {
+	r.Original.Header().Set("ETag", tag)
 }

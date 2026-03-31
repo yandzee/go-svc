@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
 
 type Request interface {
@@ -25,6 +26,8 @@ type Response interface {
 	Headers() http.Header
 	Redirect(int, string)
 	SetCookie(*http.Cookie)
+	MaxAge(time.Duration)
+	ETag(string)
 }
 
 type StringResponder interface {
