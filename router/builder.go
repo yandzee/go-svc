@@ -5,6 +5,7 @@ import (
 	"io/fs"
 	"iter"
 	"net/http"
+	"path/filepath"
 	"strings"
 
 	"github.com/yandzee/go-svc/log"
@@ -121,6 +122,19 @@ func (b *Builder) Files(p string, fs fs.FS) {
 	b.ensureFiles(p, fs)
 }
 
+func (b *Builder) File(p string, fs fs.FS, fileName ...string) {
+	fname := ""
+	if len(fileName) > 0 {
+		fname = fileName[0]
+	}
+
+	if len(fname) == 0 {
+		fname = filepath.Base(p)
+	}
+
+	b.ensureFiles(p, fs, fname)
+}
+
 func (b *Builder) IterRoutes() iter.Seq[*Route] {
 	return func(yield func(*Route) bool) {
 		for i := range b.Routes {
@@ -191,7 +205,12 @@ func (b *Builder) ensureRoute(method, path string, h Handler) {
 	})
 }
 
-func (b *Builder) ensureFiles(path string, f fs.FS) {
+func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) {
+	fileName := ""
+	if len(fname) > 0 {
+		fileName = fname[0]
+	}
+
 	for i := range b.Routes {
 		route := &b.Routes[i]
 
@@ -201,6 +220,7 @@ func (b *Builder) ensureFiles(path string, f fs.FS) {
 
 		route.Handler = nil
 		route.FileSystem = f
+		route.FileName = fileName
 
 		return
 	}
@@ -209,5 +229,6 @@ func (b *Builder) ensureFiles(path string, f fs.FS) {
 		Method:     http.MethodGet,
 		Path:       path,
 		FileSystem: f,
+		FileName:   fileName,
 	})
 }

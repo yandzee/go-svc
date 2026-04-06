@@ -12,6 +12,7 @@ type Route struct {
 	Path       string
 	Handler    Handler
 	FileSystem fs.FS
+	FileName   string
 }
 
 type CORSOptions struct {

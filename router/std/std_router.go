@@ -18,6 +18,16 @@ func Build(b *router.Builder) http.Handler {
 
 	for route := range b.IterRoutes() {
 		switch {
+		case route.FileSystem != nil && len(route.FileName) > 0:
+			mux.Handle(
+				route.Path,
+				http.StripPrefix(
+					route.Path,
+					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+						http.ServeFileFS(w, r, route.FileSystem, route.FileName)
+					}),
+				),
+			)
 		case route.FileSystem != nil:
 			mux.Handle(
 				route.Path,
