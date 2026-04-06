@@ -16,6 +16,7 @@ type Request interface {
 	PathParam(string) (string, bool)
 	LimitedBody(uint) io.ReadCloser
 	URL() *url.URL
+	Revalidates(string) bool
 }
 
 type Response interface {
@@ -28,6 +29,7 @@ type Response interface {
 	SetCookie(*http.Cookie)
 	MaxAge(time.Duration)
 	ETag(string)
+	NotModified()
 }
 
 type StringResponder interface {
@@ -35,9 +37,7 @@ type StringResponder interface {
 	Stringf(int, string, ...any)
 }
 
-type RespondOptions struct {
-	Chunked bool
-}
+type RespondOptions struct{}
 
 type JSONResponder interface {
 	JSON(int, any, ...RespondOptions) (int, error)

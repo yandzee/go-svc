@@ -99,3 +99,7 @@ func (r *Response) MaxAge(dur time.Duration) {
 func (r *Response) ETag(tag string) {
 	r.Original.Header().Set("ETag", tag)
 }
+
+func (r *Response) NotModified() {
+	r.Original.WriteHeader(http.StatusNotModified)
+}

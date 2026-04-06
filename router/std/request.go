@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 type Request struct {
@@ -47,4 +48,17 @@ func (r *Request) Cookie(name string) *http.Cookie {
 
 func (r *Request) AllCookies() []*http.Cookie {
 	return r.Original.Cookies()
+}
+
+func (r *Request) Revalidates(sum string) bool {
+	h := r.Original.Header
+	if noCache := strings.Contains(h.Get("Cache-Control"), "no-cache"); noCache {
+		return false
+	}
+
+	if noCache := strings.Contains(h.Get("Pragma"), "no-cache"); noCache {
+		return false
+	}
+
+	return h.Get("If-None-Match") == sum
 }
