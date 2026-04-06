@@ -24,68 +24,68 @@ func NewBuilder() Builder {
 	return Builder{}
 }
 
-func (b *Builder) Get(p string, h Handler) {
-	b.ensureRoute(http.MethodGet, p, h)
+func (b *Builder) Get(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodGet, p, h)
 }
 
-func (b *Builder) Post(p string, h Handler) {
-	b.ensureRoute(http.MethodPost, p, h)
+func (b *Builder) Post(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodPost, p, h)
 }
 
-func (b *Builder) Put(p string, h Handler) {
-	b.ensureRoute(http.MethodPut, p, h)
+func (b *Builder) Put(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodPut, p, h)
 }
 
-func (b *Builder) Head(p string, h Handler) {
-	b.ensureRoute(http.MethodHead, p, h)
+func (b *Builder) Head(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodHead, p, h)
 }
 
-func (b *Builder) Options(p string, h Handler) {
-	b.ensureRoute(http.MethodOptions, p, h)
+func (b *Builder) Options(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodOptions, p, h)
 }
 
-func (b *Builder) Delete(p string, h Handler) {
-	b.ensureRoute(http.MethodDelete, p, h)
+func (b *Builder) Delete(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodDelete, p, h)
 }
 
-func (b *Builder) Connect(p string, h Handler) {
-	b.ensureRoute(http.MethodConnect, p, h)
+func (b *Builder) Connect(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodConnect, p, h)
 }
 
-func (b *Builder) Patch(p string, h Handler) {
-	b.ensureRoute(http.MethodPatch, p, h)
+func (b *Builder) Patch(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodPatch, p, h)
 }
 
-func (b *Builder) Trace(p string, h Handler) {
-	b.ensureRoute(http.MethodTrace, p, h)
+func (b *Builder) Trace(p string, h Handler) *Route {
+	return b.ensureRoute(http.MethodTrace, p, h)
 }
 
-func (b *Builder) All(p string, h Handler) {
-	b.ensureRoute(MethodAll, p, h)
+func (b *Builder) All(p string, h Handler) *Route {
+	return b.ensureRoute(MethodAll, p, h)
 }
 
-func (b *Builder) Method(method, path string, handler Handler) {
+func (b *Builder) Method(method, path string, handler Handler) *Route {
 	switch method {
 	case http.MethodGet:
-		b.Get(path, handler)
+		return b.Get(path, handler)
 	case http.MethodPost:
-		b.Post(path, handler)
+		return b.Post(path, handler)
 	case http.MethodPut:
-		b.Put(path, handler)
+		return b.Put(path, handler)
 	case http.MethodHead:
-		b.Head(path, handler)
+		return b.Head(path, handler)
 	case http.MethodDelete:
-		b.Delete(path, handler)
+		return b.Delete(path, handler)
 	case http.MethodOptions:
-		b.Options(path, handler)
+		return b.Options(path, handler)
 	case http.MethodConnect:
-		b.Connect(path, handler)
+		return b.Connect(path, handler)
 	case http.MethodPatch:
-		b.Patch(path, handler)
+		return b.Patch(path, handler)
 	case http.MethodTrace:
-		b.Trace(path, handler)
+		return b.Trace(path, handler)
 	case MethodAll:
-		b.All(path, handler)
+		return b.All(path, handler)
 	default:
 		panic(fmt.Sprintf("Router: unsupported method '%s' (path: '%s')", method, path))
 	}
@@ -118,11 +118,11 @@ func (b *Builder) CORS(enabled bool, maybeOpts ...CORSOptions) {
 	b.CORSOptions = opts
 }
 
-func (b *Builder) Files(p string, fs fs.FS) {
-	b.ensureFiles(p, fs)
+func (b *Builder) Files(p string, fs fs.FS) *Route {
+	return b.ensureFiles(p, fs)
 }
 
-func (b *Builder) File(p string, fs fs.FS, fileName ...string) {
+func (b *Builder) File(p string, fs fs.FS, fileName ...string) *Route {
 	fname := ""
 	if len(fileName) > 0 {
 		fname = fileName[0]
@@ -132,7 +132,7 @@ func (b *Builder) File(p string, fs fs.FS, fileName ...string) {
 		fname = filepath.Base(p)
 	}
 
-	b.ensureFiles(p, fs, fname)
+	return b.ensureFiles(p, fs, fname)
 }
 
 func (b *Builder) IterRoutes() iter.Seq[*Route] {
@@ -184,7 +184,7 @@ func (b *Builder) joinPathParts(p, q string) string {
 	}
 }
 
-func (b *Builder) ensureRoute(method, path string, h Handler) {
+func (b *Builder) ensureRoute(method, path string, h Handler) *Route {
 	for i := range b.Routes {
 		route := &b.Routes[i]
 
@@ -195,7 +195,7 @@ func (b *Builder) ensureRoute(method, path string, h Handler) {
 		route.FileSystem = nil
 		route.Handler = h
 
-		return
+		return route
 	}
 
 	b.Routes = append(b.Routes, Route{
@@ -203,9 +203,11 @@ func (b *Builder) ensureRoute(method, path string, h Handler) {
 		Path:    path,
 		Handler: h,
 	})
+
+	return &b.Routes[len(b.Routes)-1]
 }
 
-func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) {
+func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) *Route {
 	fileName := ""
 	if len(fname) > 0 {
 		fileName = fname[0]
@@ -222,7 +224,7 @@ func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) {
 		route.FileSystem = f
 		route.FileName = fileName
 
-		return
+		return route
 	}
 
 	b.Routes = append(b.Routes, Route{
@@ -231,4 +233,6 @@ func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) {
 		FileSystem: f,
 		FileName:   fileName,
 	})
+
+	return &b.Routes[len(b.Routes)-1]
 }
