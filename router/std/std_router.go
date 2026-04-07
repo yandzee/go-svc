@@ -6,19 +6,42 @@ import (
 	"net/http"
 
 	"github.com/klauspost/compress/gzhttp"
+	"github.com/klauspost/compress/zstd"
 	"github.com/rs/cors"
 
 	"github.com/yandzee/go-svc/data/jsoner"
 	"github.com/yandzee/go-svc/router"
 )
 
+var LoggedNotFound = func(log *slog.Logger) router.Handler {
+	return func(rctx *router.RequestContext) {
+		log.Warn("resource is not found", "route", rctx.Request.URL().Path)
+		rctx.Response.String(http.StatusNotFound)
+	}
+}
+
+type stdBuilder struct {
+	Jsoner jsoner.Jsoner
+}
+
 func Build(b *router.Builder) http.Handler {
+	builder := stdBuilder{}
+
+	return builder.Build(b)
+}
+
+func (sb *stdBuilder) Build(b *router.Builder) http.Handler {
 	mux := http.NewServeMux()
 	handler := http.Handler(mux)
-	jsoner := jsoner.Jsoner{}
 
 	for route := range b.IterRoutes() {
-		p, h := preparePathAndHandler(route, &jsoner)
+		if route.CompressionOptions == nil {
+			route.CompressionOptions = b.CompressionOptions
+		}
+
+		p, h := sb.PreparePathAndInnerHandler(route)
+		h = sb.wrapCompression(h, route.CompressionOptions, b.CompressionOptions)
+
 		mux.Handle(p, h)
 	}
 
@@ -46,14 +69,7 @@ func Build(b *router.Builder) http.Handler {
 	return handler
 }
 
-var LoggedNotFound = func(log *slog.Logger) router.Handler {
-	return func(rctx *router.RequestContext) {
-		log.Warn("resource is not found", "route", rctx.Request.URL().Path)
-		rctx.Response.String(http.StatusNotFound)
-	}
-}
-
-func preparePathAndHandler(route *router.Route, j *jsoner.Jsoner) (string, http.Handler) {
+func (b *stdBuilder) PreparePathAndInnerHandler(route *router.Route) (string, http.Handler) {
 	p := route.Path
 	var h http.Handler
 
@@ -71,16 +87,62 @@ func preparePathAndHandler(route *router.Route, j *jsoner.Jsoner) (string, http.
 			http.FileServerFS(route.FileSystem),
 		)
 	case route.Method == router.MethodAll:
-		h = makeHandler(route.Handler, j)
+		h = b.wrapHandler(route.Handler)
 	default:
 		p = fmt.Sprintf("%s %s", route.Method, route.Path)
-		h = makeHandler(route.Handler, j)
+		h = b.wrapHandler(route.Handler)
 	}
 
-	return p, gzhttp.GzipHandler(h)
+	return p, h
 }
 
-func makeHandler(h router.Handler, j *jsoner.Jsoner) http.Handler {
+func (b *stdBuilder) wrapCompression(
+	h http.Handler,
+	compressionOpts ...*router.CompressionOptions,
+) http.Handler {
+	var opts *router.CompressionOptions
+	for _, o := range compressionOpts {
+		opts = o
+	}
+
+	if opts == nil || opts.Disabled {
+		return h
+	}
+
+	// NOTE: At least gzip is enabled
+	gzipEnabled := opts.ZstdDisabled || !opts.GzipDisabled
+
+	wrapper, err := gzhttp.NewWrapper(
+		gzhttp.CompressionLevel(b.ensureZstdCompressionLevel(opts.ZstdCompressionLevel)),
+		gzhttp.EnableZstd(!opts.ZstdDisabled),
+		gzhttp.EnableGzip(gzipEnabled),
+	)
+
+	if err != nil {
+		panic(err.Error())
+	}
+
+	return wrapper(h)
+}
+
+func (b *stdBuilder) ensureZstdCompressionLevel(lvl router.ZstdCompressionLevel) int {
+	ensured := int(zstd.SpeedDefault)
+
+	switch lvl {
+	case router.FastestCompression:
+		ensured = int(zstd.SpeedFastest)
+	case router.DefaultCompression:
+		ensured = int(zstd.SpeedDefault)
+	case router.BetterCompression:
+		ensured = int(zstd.SpeedBetterCompression)
+	case router.BestCompression:
+		ensured = int(zstd.SpeedBestCompression)
+	}
+
+	return ensured
+}
+
+func (b *stdBuilder) wrapHandler(h router.Handler) http.Handler {
 	return http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
 		h(&router.RequestContext{
 			Request: &Request{
@@ -90,7 +152,7 @@ func makeHandler(h router.Handler, j *jsoner.Jsoner) http.Handler {
 			Response: &Response{
 				Original: res,
 				Request:  req,
-				Jsoner:   j,
+				Jsoner:   &b.Jsoner,
 			},
 		})
 	})

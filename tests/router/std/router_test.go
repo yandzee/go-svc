@@ -18,11 +18,15 @@ const (
 	ExtendBaseURL   = "/extended"
 	AttachedBaseURL = "/attached"
 	FilesURL        = "/files/"
+	SingleFileURL   = "/single-file"
+	MissingFileURL  = "/missing-file"
 
-	TestFilename1    = "testfile1.dat"
-	TestFilename2    = "testfile2.dat"
-	TestFileContent1 = "test file content 1"
-	TestFileContent2 = "test file content 2"
+	TestFilename1     = "testfile1.dat"
+	TestFilename2     = "testfile2.dat"
+	TestFileContent1  = "test file content 1"
+	TestFileContent2  = "test file content 2"
+	SingleFileName    = "data.txt"
+	SingleFileContent = "single file content"
 )
 
 type TestOutputs struct {
@@ -76,6 +80,36 @@ func TestFiles(t *testing.T) {
 	}
 }
 
+func TestFile(t *testing.T) {
+	handler, _ := buildRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, SingleFileURL, nil)
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusOK {
+		t.Fatalf("wrong response code %d for file '%s'", resp.Code, req.URL.Path)
+	}
+
+	if s := resp.Body.String(); s != SingleFileContent {
+		t.Fatalf("wrong response '%s' for file '%s'", s, req.URL.Path)
+	}
+}
+
+func TestFileMissing(t *testing.T) {
+	handler, _ := buildRouter(t)
+
+	req := httptest.NewRequest(http.MethodGet, MissingFileURL, nil)
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for missing file, got %d", resp.Code)
+	}
+}
+
 func buildRouter(t *testing.T) (http.Handler, *TestOutputs) {
 	r := router.NewBuilder()
 	ext := router.NewBuilder()
@@ -109,6 +143,14 @@ func buildRouter(t *testing.T) (http.Handler, *TestOutputs) {
 			Data: []byte(TestFileContent1),
 		},
 	})
+
+	r.File(SingleFileURL, fstest.MapFS{
+		SingleFileName: {
+			Data: []byte(SingleFileContent),
+		},
+	}, SingleFileName)
+
+	r.File(MissingFileURL, fstest.MapFS{}, "nonexistent.txt")
 
 	att.Files(FilesURL, fstest.MapFS{
 		TestFilename2: {

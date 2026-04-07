@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/fs"
 	"iter"
+	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -15,9 +16,23 @@ import (
 const MethodAll = ""
 
 type Builder struct {
-	Routes      []Route
-	CORSEnabled bool
-	CORSOptions *CORSOptions
+	Routes             []Route
+	CORSEnabled        bool
+	CORSOptions        *CORSOptions
+	CompressionOptions *CompressionOptions
+}
+
+type CORSOptions struct {
+	AllowedMethods []string
+	AllowedOrigins []string
+
+	AllowedHeaders []string
+	ExposedHeaders []string
+
+	AllowCredentials bool
+
+	DebugEnabled bool
+	Logger       *slog.Logger
 }
 
 func NewBuilder() Builder {
@@ -88,6 +103,14 @@ func (b *Builder) Method(method, path string, handler Handler) *Route {
 		return b.All(path, handler)
 	default:
 		panic(fmt.Sprintf("Router: unsupported method '%s' (path: '%s')", method, path))
+	}
+}
+
+func (b *Builder) Compression(opts ...*CompressionOptions) {
+	if len(opts) > 0 {
+		b.CompressionOptions = opts[0]
+	} else {
+		b.CompressionOptions = &CompressionOptions{}
 	}
 }
 
