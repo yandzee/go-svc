@@ -187,16 +187,20 @@ func (b *Builder) Extend(routes iter.Seq[*Route], prefixes ...string) error {
 			path = b.joinPathParts(prefix, path)
 		}
 
-		if route.FileSystem != nil {
-			b.Files(path, route.FileSystem)
-			continue
+		var r *Route
+
+		switch {
+		case route.FileSystem != nil && len(route.FileName) > 0:
+			r = b.File(path, route.FileSystem, route.FileName)
+		case route.FileSystem != nil:
+			r = b.Files(path, route.FileSystem)
+		case route.Handler != nil:
+			r = b.Method(route.Method, path, route.Handler)
 		}
 
-		if route.Handler == nil {
-			continue
+		if r != nil {
+			r.CompressionOptions = route.CompressionOptions
 		}
-
-		b.Method(route.Method, path, route.Handler)
 	}
 
 	return nil

@@ -200,6 +200,31 @@ func TestCompressionRouterDisabledRouteEnabled(t *testing.T) {
 	}
 }
 
+func TestCompressionExtendedRoute(t *testing.T) {
+	r := router.NewBuilder()
+
+	ext := router.NewBuilder()
+	ext.Get(CompressURL, largeResponseHandler).Compression(true)
+
+	if err := r.Extend(ext.IterRoutes()); err != nil {
+		t.Fatalf("Failed to extend routes: %s", err.Error())
+	}
+
+	handler := stdrouter.Build(&r)
+
+	for _, enc := range []string{"gzip", "zstd"} {
+		req := httptest.NewRequest(http.MethodGet, CompressURL, nil)
+		req.Header.Set("Accept-Encoding", enc)
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+
+		if ce := resp.Header().Get("Content-Encoding"); ce != enc {
+			t.Fatalf("expected Content-Encoding %q, got %q", enc, ce)
+		}
+	}
+}
+
 func largeResponseHandler(rctx *router.RequestContext) {
 	rctx.Response.String(http.StatusOK, largeBody)
 }
