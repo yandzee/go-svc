@@ -27,7 +27,12 @@ const (
 	TestFileContent2  = "test file content 2"
 	SingleFileName    = "data.txt"
 	SingleFileContent = "single file content"
+
+	CompressURL = "/compress"
 )
+
+// Large enough to trigger gzhttp compression (min ~1400 bytes)
+var largeBody = strings.Repeat("hello world ", 200)
 
 type TestOutputs struct {
 	// Mapping from route path to number of times handler was called
@@ -108,6 +113,95 @@ func TestFileMissing(t *testing.T) {
 	if resp.Code != http.StatusNotFound {
 		t.Fatalf("expected 404 for missing file, got %d", resp.Code)
 	}
+}
+
+func TestCompressionInherited(t *testing.T) {
+	r := router.NewBuilder()
+	r.Compression(true)
+	r.Get(CompressURL, largeResponseHandler)
+	handler := stdrouter.Build(&r)
+
+	for _, enc := range []string{"gzip", "zstd"} {
+		req := httptest.NewRequest(http.MethodGet, CompressURL, nil)
+		req.Header.Set("Accept-Encoding", enc)
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+
+		if ce := resp.Header().Get("Content-Encoding"); ce != enc {
+			t.Fatalf("expected Content-Encoding %q, got %q", enc, ce)
+		}
+	}
+}
+
+func TestCompressionZstdDisabled(t *testing.T) {
+	r := router.NewBuilder()
+	r.Compression(true, &router.CompressionOptions{ZstdDisabled: true})
+	r.Get(CompressURL, largeResponseHandler)
+	handler := stdrouter.Build(&r)
+
+	// gzip should still work
+	req := httptest.NewRequest(http.MethodGet, CompressURL, nil)
+	req.Header.Set("Accept-Encoding", "gzip")
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if ce := resp.Header().Get("Content-Encoding"); ce != "gzip" {
+		t.Fatalf("expected Content-Encoding %q, got %q", "gzip", ce)
+	}
+
+	// zstd should not be applied
+	req = httptest.NewRequest(http.MethodGet, CompressURL, nil)
+	req.Header.Set("Accept-Encoding", "zstd")
+	resp = httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if ce := resp.Header().Get("Content-Encoding"); ce == "zstd" {
+		t.Fatal("expected zstd compression to be disabled, but got Content-Encoding: zstd")
+	}
+}
+
+func TestCompressionRouterEnabledRouteDisabled(t *testing.T) {
+	r := router.NewBuilder()
+	r.Compression(true)
+	r.Get(CompressURL, largeResponseHandler).Compression(false)
+	handler := stdrouter.Build(&r)
+
+	for _, enc := range []string{"gzip", "zstd"} {
+		req := httptest.NewRequest(http.MethodGet, CompressURL, nil)
+		req.Header.Set("Accept-Encoding", enc)
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+
+		if ce := resp.Header().Get("Content-Encoding"); ce != "" {
+			t.Fatalf("expected no compression, got Content-Encoding %q", ce)
+		}
+	}
+}
+
+func TestCompressionRouterDisabledRouteEnabled(t *testing.T) {
+	r := router.NewBuilder()
+	r.Get(CompressURL, largeResponseHandler).Compression(true)
+	handler := stdrouter.Build(&r)
+
+	for _, enc := range []string{"gzip", "zstd"} {
+		req := httptest.NewRequest(http.MethodGet, CompressURL, nil)
+		req.Header.Set("Accept-Encoding", enc)
+		resp := httptest.NewRecorder()
+
+		handler.ServeHTTP(resp, req)
+
+		if ce := resp.Header().Get("Content-Encoding"); ce != enc {
+			t.Fatalf("expected Content-Encoding %q, got %q", enc, ce)
+		}
+	}
+}
+
+func largeResponseHandler(rctx *router.RequestContext) {
+	rctx.Response.String(http.StatusOK, largeBody)
 }
 
 func buildRouter(t *testing.T) (http.Handler, *TestOutputs) {

@@ -106,7 +106,17 @@ func (b *Builder) Method(method, path string, handler Handler) *Route {
 	}
 }
 
-func (b *Builder) Compression(opts ...*CompressionOptions) {
+func (b *Builder) Compression(enabled bool, opts ...*CompressionOptions) {
+	if !enabled {
+		b.CompressionOptions = nil
+
+		for route := range b.IterRoutes() {
+			route.CompressionOptions = nil
+		}
+
+		return
+	}
+
 	if len(opts) > 0 {
 		b.CompressionOptions = opts[0]
 	} else {
@@ -222,9 +232,10 @@ func (b *Builder) ensureRoute(method, path string, h Handler) *Route {
 	}
 
 	b.Routes = append(b.Routes, Route{
-		Method:  method,
-		Path:    path,
-		Handler: h,
+		Method:             method,
+		Path:               path,
+		Handler:            h,
+		CompressionOptions: b.CompressionOptions,
 	})
 
 	return &b.Routes[len(b.Routes)-1]
@@ -251,10 +262,11 @@ func (b *Builder) ensureFiles(path string, f fs.FS, fname ...string) *Route {
 	}
 
 	b.Routes = append(b.Routes, Route{
-		Method:     http.MethodGet,
-		Path:       path,
-		FileSystem: f,
-		FileName:   fileName,
+		Method:             http.MethodGet,
+		Path:               path,
+		FileSystem:         f,
+		FileName:           fileName,
+		CompressionOptions: b.CompressionOptions,
 	})
 
 	return &b.Routes[len(b.Routes)-1]

@@ -35,10 +35,6 @@ func (sb *stdBuilder) Build(b *router.Builder) http.Handler {
 	handler := http.Handler(mux)
 
 	for route := range b.IterRoutes() {
-		if route.CompressionOptions == nil {
-			route.CompressionOptions = b.CompressionOptions
-		}
-
 		p, h := sb.PreparePathAndInnerHandler(route)
 		h = sb.wrapCompression(h, route.CompressionOptions, b.CompressionOptions)
 
@@ -102,10 +98,15 @@ func (b *stdBuilder) wrapCompression(
 ) http.Handler {
 	var opts *router.CompressionOptions
 	for _, o := range compressionOpts {
+		// NOTE: First nil options means that compression is disabled for the route
+		if o == nil {
+			break
+		}
+
 		opts = o
 	}
 
-	if opts == nil || opts.Disabled {
+	if opts == nil {
 		return h
 	}
 

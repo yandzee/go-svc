@@ -26,13 +26,17 @@ type Route struct {
 }
 
 type CompressionOptions struct {
-	Disabled             bool
 	ZstdDisabled         bool
 	ZstdCompressionLevel ZstdCompressionLevel
 	GzipDisabled         bool
 }
 
-func (r *Route) Compression(opts ...*CompressionOptions) *Route {
+func (r *Route) Compression(enabled bool, opts ...*CompressionOptions) *Route {
+	if !enabled {
+		r.CompressionOptions = nil
+		return r
+	}
+
 	if len(opts) > 0 {
 		r.CompressionOptions = opts[0]
 	} else {
