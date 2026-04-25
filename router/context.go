@@ -16,6 +16,7 @@ type Request interface {
 	PathParam(string) (string, bool)
 	LimitedBody(uint) io.ReadCloser
 	URL() *url.URL
+	Method() string
 	Revalidates(string) bool
 }
 

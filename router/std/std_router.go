@@ -15,7 +15,12 @@ import (
 
 var LoggedNotFound = func(log *slog.Logger) router.Handler {
 	return func(rctx *router.RequestContext) {
-		log.Warn("resource is not found", "route", rctx.Request.URL().Path)
+		log.Warn(
+			"resource is not found",
+			"route", rctx.Request.URL().Path,
+			"method", rctx.Request.Method(),
+		)
+
 		rctx.Response.String(http.StatusNotFound)
 	}
 }

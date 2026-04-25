@@ -18,6 +18,10 @@ func (r *Request) Context() context.Context {
 	return r.Original.Context()
 }
 
+func (r *Request) Method() string {
+	return r.Original.Method
+}
+
 func (r *Request) URL() *url.URL {
 	return r.Original.URL
 }

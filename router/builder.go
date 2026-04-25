@@ -23,16 +23,16 @@ type Builder struct {
 }
 
 type CORSOptions struct {
-	AllowedMethods []string
-	AllowedOrigins []string
+	AllowedMethods []string `json:"allowedMethods"`
+	AllowedOrigins []string `json:"allowedOrigins"`
 
-	AllowedHeaders []string
-	ExposedHeaders []string
+	AllowedHeaders []string `json:"allowedHeaders"`
+	ExposedHeaders []string `json:"exposedHeaders"`
 
-	AllowCredentials bool
+	AllowCredentials bool `json:"allowCredentials"`
 
-	DebugEnabled bool
-	Logger       *slog.Logger
+	DebugEnabled bool         `json:"debugEnabled"`
+	Logger       *slog.Logger `json:"-"`
 }
 
 func NewBuilder() Builder {
