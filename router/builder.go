@@ -4,13 +4,9 @@ import (
 	"fmt"
 	"io/fs"
 	"iter"
-	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
-
-	"github.com/yandzee/go-svc/log"
-	httputils "github.com/yandzee/go-svc/utils/http"
 )
 
 const MethodAll = ""
@@ -20,19 +16,6 @@ type Builder struct {
 	CORSEnabled        bool
 	CORSOptions        *CORSOptions
 	CompressionOptions *CompressionOptions
-}
-
-type CORSOptions struct {
-	AllowedMethods []string `json:"allowedMethods"`
-	AllowedOrigins []string `json:"allowedOrigins"`
-
-	AllowedHeaders []string `json:"allowedHeaders"`
-	ExposedHeaders []string `json:"exposedHeaders"`
-
-	AllowCredentials bool `json:"allowCredentials"`
-
-	DebugEnabled bool         `json:"debugEnabled"`
-	Logger       *slog.Logger `json:"-"`
 }
 
 func NewBuilder() Builder {
@@ -106,49 +89,17 @@ func (b *Builder) Method(method, path string, handler Handler) *Route {
 	}
 }
 
-func (b *Builder) Compression(enabled bool, opts ...*CompressionOptions) {
-	if !enabled {
-		b.CompressionOptions = nil
+func (b *Builder) Compression(enabled bool, opts ...CompressionOptions) {
+	b.CompressionOptions = ensureCompressionOptions(enabled, opts)
 
-		for route := range b.IterRoutes() {
-			route.CompressionOptions = nil
-		}
-
-		return
-	}
-
-	if len(opts) > 0 {
-		b.CompressionOptions = opts[0]
-	} else {
-		b.CompressionOptions = &CompressionOptions{}
+	for route := range b.IterRoutes() {
+		route.CompressionOptions = b.CompressionOptions
 	}
 }
 
-func (b *Builder) CORS(enabled bool, maybeOpts ...CORSOptions) {
+func (b *Builder) CORS(enabled bool, opts ...CORSOptions) {
 	b.CORSEnabled = enabled
-
-	if !enabled {
-		b.CORSOptions = nil
-		return
-	}
-
-	var opts *CORSOptions
-
-	switch {
-	case len(maybeOpts) > 0:
-		opts = &maybeOpts[0]
-	default:
-		opts = &CORSOptions{
-			AllowedMethods: httputils.AllMethods,
-			AllowedOrigins: []string{},
-			AllowedHeaders: []string{"*"},
-			ExposedHeaders: []string{"*"},
-			DebugEnabled:   false,
-			Logger:         log.Discard(),
-		}
-	}
-
-	b.CORSOptions = opts
+	b.CORSOptions = ensureCORSOptions(enabled, opts)
 }
 
 func (b *Builder) Files(p string, fs fs.FS) *Route {

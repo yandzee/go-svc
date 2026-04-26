@@ -1,6 +1,7 @@
 package server
 
 import (
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -29,6 +30,7 @@ const (
 	SingleFileContent = "single file content"
 
 	CompressURL = "/compress"
+	CorsURL     = "/cors"
 )
 
 // Large enough to trigger gzhttp compression (min ~1400 bytes)
@@ -136,7 +138,7 @@ func TestCompressionInherited(t *testing.T) {
 
 func TestCompressionZstdDisabled(t *testing.T) {
 	r := router.NewBuilder()
-	r.Compression(true, &router.CompressionOptions{ZstdDisabled: true})
+	r.Compression(true, router.CompressionOptions{ZstdDisabled: true})
 	r.Get(CompressURL, largeResponseHandler)
 	handler := stdrouter.Build(&r)
 
@@ -222,6 +224,36 @@ func TestCompressionExtendedRoute(t *testing.T) {
 		if ce := resp.Header().Get("Content-Encoding"); ce != enc {
 			t.Fatalf("expected Content-Encoding %q, got %q", enc, ce)
 		}
+	}
+}
+
+func TestCORSDisabledPreflight(t *testing.T) {
+	r := router.NewBuilder()
+	r.CORS(false)
+
+	r.Post(CorsURL, func(rc *router.RequestContext) {
+		rc.Response.String(http.StatusOK, "cors response")
+	})
+
+	handler := stdrouter.Build(&r)
+
+	req := httptest.NewRequest(http.MethodOptions, CorsURL, nil)
+	req.Header.Set("Origin", "http://test.com")
+	req.Header.Set("Access-Control-Request-Method", http.MethodPost)
+	req.Header.Set("Access-Control-Request-Headers", "Content-Type")
+
+	resp := httptest.NewRecorder()
+
+	handler.ServeHTTP(resp, req)
+
+	if res := resp.Result(); res.StatusCode != 405 {
+		body, _ := io.ReadAll(res.Body)
+		t.Fatalf(
+			"expected status 204, got %d, body: %v, headers: %v",
+			res.StatusCode,
+			string(body),
+			res.Header,
+		)
 	}
 }
 

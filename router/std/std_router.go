@@ -27,7 +27,13 @@ var LoggedNotFound = func(log *slog.Logger) router.Handler {
 
 type stdBuilder struct {
 	Jsoner jsoner.Jsoner
+
+	// NOTE: Router-level wrappers
+	cors        *cors.Cors
+	compression compressionWrapper
 }
+
+type compressionWrapper func(http.Handler) http.HandlerFunc
 
 func Build(b *router.Builder) http.Handler {
 	builder := stdBuilder{}
@@ -46,28 +52,7 @@ func (sb *stdBuilder) Build(b *router.Builder) http.Handler {
 		mux.Handle(p, h)
 	}
 
-	if b.CORSEnabled {
-		opts := cors.Options{
-			AllowedOrigins:   b.CORSOptions.AllowedOrigins,
-			AllowCredentials: b.CORSOptions.AllowCredentials,
-			AllowedHeaders:   b.CORSOptions.AllowedHeaders,
-			AllowedMethods:   b.CORSOptions.AllowedMethods,
-			ExposedHeaders:   b.CORSOptions.ExposedHeaders,
-			Debug:            b.CORSOptions.DebugEnabled,
-			Logger:           nil,
-		}
-
-		if opts.Debug {
-			opts.Logger = &corsLogger{
-				Log: b.CORSOptions.Logger,
-			}
-		}
-
-		corsServer := cors.New(opts)
-		handler = corsServer.Handler(handler)
-	}
-
-	return handler
+	return sb.wrapCORS(handler, b.CORSOptions)
 }
 
 func (b *stdBuilder) PreparePathAndInnerHandler(route *router.Route) (string, http.Handler) {
@@ -97,24 +82,76 @@ func (b *stdBuilder) PreparePathAndInnerHandler(route *router.Route) (string, ht
 	return p, h
 }
 
-func (b *stdBuilder) wrapCompression(
+func (b *stdBuilder) wrapCORS(
 	h http.Handler,
-	compressionOpts ...*router.CompressionOptions,
+	opts *router.CORSOptions,
 ) http.Handler {
-	var opts *router.CompressionOptions
-	for _, o := range compressionOpts {
-		// NOTE: First nil options means that compression is disabled for the route
-		if o == nil {
-			break
-		}
-
-		opts = o
-	}
-
 	if opts == nil {
 		return h
 	}
 
+	// NOTE: Route has no specific CORS options or they are equal to router options
+	b.ensureRouterCORS(opts)
+	return b.cors.Handler(h)
+}
+
+func (b *stdBuilder) ensureRouterCORS(opts *router.CORSOptions) *cors.Cors {
+	if b.cors == nil {
+		b.cors = b.createCORS(opts)
+	}
+
+	return b.cors
+}
+
+func (b *stdBuilder) createCORS(opts *router.CORSOptions) *cors.Cors {
+	o := cors.Options{
+		AllowedOrigins:   opts.AllowedOrigins,
+		AllowCredentials: opts.AllowCredentials,
+		AllowedHeaders:   opts.AllowedHeaders,
+		AllowedMethods:   opts.AllowedMethods,
+		ExposedHeaders:   opts.ExposedHeaders,
+		Debug:            opts.DebugEnabled,
+		Logger:           nil,
+	}
+
+	if opts.DebugEnabled {
+		o.Logger = &corsLogger{
+			Log: opts.Logger,
+		}
+	}
+
+	return cors.New(o)
+}
+
+func (b *stdBuilder) wrapCompression(
+	h http.Handler,
+	routeOptions *router.CompressionOptions,
+	routerOptions *router.CompressionOptions,
+) http.Handler {
+	if routeOptions == nil {
+		return h
+	} else if routerOptions != routeOptions {
+		routeCompression := b.createCompression(routeOptions)
+		return routeCompression(h)
+	}
+
+	if routerOptions == nil {
+		return h
+	}
+
+	b.ensureRouterCompression(routerOptions)
+	return b.compression(h)
+}
+
+func (b *stdBuilder) ensureRouterCompression(opts *router.CompressionOptions) compressionWrapper {
+	if b.compression == nil {
+		b.compression = b.createCompression(opts)
+	}
+
+	return b.compression
+}
+
+func (b *stdBuilder) createCompression(opts *router.CompressionOptions) compressionWrapper {
 	// NOTE: At least gzip is enabled
 	gzipEnabled := opts.ZstdDisabled || !opts.GzipDisabled
 
@@ -128,7 +165,7 @@ func (b *stdBuilder) wrapCompression(
 		panic(err.Error())
 	}
 
-	return wrapper(h)
+	return wrapper
 }
 
 func (b *stdBuilder) ensureZstdCompressionLevel(lvl router.ZstdCompressionLevel) int {
