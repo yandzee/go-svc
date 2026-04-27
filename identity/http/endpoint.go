@@ -16,18 +16,39 @@ import (
 )
 
 const (
-	AccessTokenHeader  = "X-Access-Token"
-	RefreshTokenHeader = "X-Refresh-Token"
+	DefaultAccessTokenKey  = "X-Access-Token"
+	DefaultRefreshTokenKey = "X-Refresh-Token"
 
 	KiloByte = 1024
 )
 
+type AuthCredentialsMedia int
+
+const (
+	// NOTE: Auth credentials are managed via unsecured plain http headers
+	PlainHeadersMedia AuthCredentialsMedia = iota
+
+	// NOTE: Auth credentials are managed via cookies
+	CookiesMedia
+
+	// NOTE: Same as CookieMedia but Secure flag is enabled
+	SecureCookiesMedia
+)
+
 type IdentityEndpoint[U identity.User] struct {
-	Provider           identity.Provider[U]
-	Log                *slog.Logger
-	AccessTokenHeader  string
-	RefreshTokenHeader string
-	TokenPrivateKey    *ecdsa.PrivateKey
+	Provider        identity.Provider[U]
+	Log             *slog.Logger
+	TokenPrivateKey *ecdsa.PrivateKey
+	Media           AuthCredentialsMedia
+
+	// NOTE: Those are strings which will be used to name headers / cookies
+	AccessTokenKey  string
+	RefreshTokenKey string
+
+	// NOTE: Set this path to limit requests with refresh token attached as cookie
+	RefreshTokenCookiePath string
+
+	DisableHttpOnly bool
 }
 
 func Wrap[U identity.User](id identity.Provider[U]) *IdentityEndpoint[U] {
@@ -40,7 +61,7 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 	log := ep.log()
 
 	return func(rctx *router.RequestContext) {
-		pair, err := ep.tokensFromRequest(rctx.Request)
+		atoken, err := ep.getAccessTokenFromRequest(rctx.Request)
 		if err != nil {
 			log.Error("tokensFromRequest failure", "err", err.Error())
 
@@ -52,33 +73,26 @@ func (ep *IdentityEndpoint[U]) Check() router.Handler {
 		}
 
 		switch {
-		case pair.AccessToken == nil:
+		case atoken == nil:
 			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: no access token")
-		case pair.AccessToken.Validation.IsExpired:
+		case atoken.Validation.IsExpired:
 			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is expired")
-		case pair.AccessToken.Validation.IsMalformed:
+		case atoken.Validation.IsMalformed:
 			rctx.Response.String(http.StatusUnauthorized, "Unauthorized: token is malformed")
-		case pair.AccessToken.Validation.IsParseError:
-			err := pair.AccessToken.Validation.Error
+		case atoken.Validation.IsParseError:
+			err := atoken.Validation.Error
 			rctx.Response.String(
 				http.StatusInternalServerError,
 				"CheckAuth: token parse error: "+err.Error(),
 			)
-		case pair.AccessToken.Validation.Error != nil:
-			err := pair.AccessToken.Validation.Error
+		case atoken.Validation.Error != nil:
+			err := atoken.Validation.Error
 			rctx.Response.String(
 				http.StatusInternalServerError,
 				"CheckAuth: unexpected error: "+err.Error(),
 			)
 		default:
-			dur, _ := pair.AccessToken.Token.Remaining()
-
-			var rtoken *identity.Token = nil
-			if pair.RefreshToken != nil {
-				rtoken = pair.RefreshToken.Token
-			}
-
-			ep.respondTokens(rctx, pair.AccessToken.Token, rtoken)
+			dur, _ := atoken.Token.Remaining()
 
 			rctx.Response.Stringf(
 				http.StatusOK,
@@ -156,7 +170,7 @@ func (ep *IdentityEndpoint[U]) Signup() router.Handler {
 		}
 
 		if signupResult.IsSuccess() {
-			ep.respondTokens(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
+			ep.setTokensToResponse(rctx, signupResult.Tokens.AccessToken, signupResult.Tokens.RefreshToken)
 		}
 
 		_, _ = rctx.Response.JSON(http.StatusOK, signupResult)
@@ -201,7 +215,7 @@ func (ep *IdentityEndpoint[U]) Signin() router.Handler {
 		if signinResult.NotAuthorized {
 			st = http.StatusUnauthorized
 		} else {
-			ep.respondTokens(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
+			ep.setTokensToResponse(rctx, signinResult.Tokens.AccessToken, signinResult.Tokens.RefreshToken)
 		}
 
 		_, _ = rctx.Response.JSON(st, signinResult)
@@ -212,7 +226,7 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 	log := ep.log()
 
 	return func(rctx *router.RequestContext) {
-		pair, err := ep.tokensFromRequest(rctx.Request)
+		pair, err := ep.getTokensFromRequest(rctx.Request)
 		if err != nil {
 			log.Error("Refresh failure", "err", err.Error())
 			rctx.Response.Stringf(
@@ -248,7 +262,7 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 			return
 		}
 
-		ep.respondTokens(rctx, tokenPair.AccessToken, tokenPair.RefreshToken)
+		ep.setTokensToResponse(rctx, tokenPair.AccessToken, tokenPair.RefreshToken)
 
 		_, err = fmt.Fprintf(
 			rctx.Response,
@@ -268,66 +282,121 @@ func (ep *IdentityEndpoint[U]) Refresh() router.Handler {
 	}
 }
 
-func (ep *IdentityEndpoint[U]) respondTokens(
-	rctx *router.RequestContext,
+func (ep *IdentityEndpoint[U]) setTokensToResponse(
+	rc *router.RequestContext,
 	atoken *identity.Token,
 	rtoken *identity.Token,
 ) {
-	headers := rctx.Response.Headers()
+	switch ep.Media {
+	case PlainHeadersMedia:
+		h := rc.Response.Headers()
 
-	if atoken != nil {
-		hname := ep.accessTokenHeaderName()
-		headers.Set(hname, atoken.JWTString)
+		if atoken != nil {
+			h.Set(ep.accessTokenKey(), atoken.JWTString)
+		}
 
-		cookie := atoken.AsCookie(hname)
-		rctx.Response.SetCookie(&cookie)
-	}
+		if rtoken != nil {
+			h.Set(ep.refreshTokenKey(), rtoken.JWTString)
+		}
+	default:
+		if atoken != nil {
+			cookie := atoken.AsCookie(ep.accessTokenKey())
+			cookie.HttpOnly = !ep.DisableHttpOnly
+			cookie.Secure = ep.Media == SecureCookiesMedia
 
-	if rtoken != nil {
-		headers.Set(ep.refreshTokenHeaderName(), rtoken.JWTString)
+			rc.Response.SetCookie(&cookie)
+		}
+
+		if rtoken != nil {
+			cookie := rtoken.AsCookie(ep.refreshTokenKey())
+			cookie.HttpOnly = !ep.DisableHttpOnly
+			cookie.Secure = ep.Media == SecureCookiesMedia
+			cookie.Path = ep.RefreshTokenCookiePath
+
+			rc.Response.SetCookie(&cookie)
+		}
 	}
 }
 
-func (ep *IdentityEndpoint[U]) tokensFromRequest(r router.Request) (identity.ValidatedTokenPair, error) {
-	headers := r.Headers()
-
-	accessTokenHeaderName := ep.accessTokenHeaderName()
-	accessTokenHeader := headers.Get(accessTokenHeaderName)
-
-	if len(accessTokenHeader) == 0 {
-		accessTokenCookie := r.Cookie(accessTokenHeaderName)
-
-		if accessTokenCookie != nil {
-			accessTokenHeader = accessTokenCookie.Value
-		}
-	}
-
-	refreshTokenHeader := headers.Get(ep.refreshTokenHeaderName())
-
+func (ep *IdentityEndpoint[U]) getTokensFromRequest(r router.Request) (identity.ValidatedTokenPair, error) {
 	pair := identity.ValidatedTokenPair{}
-	var err error
 
-	if len(accessTokenHeader) > 0 {
-		pair.AccessToken, err = ep.parseToken(accessTokenHeader)
-		if err != nil {
-			return pair, errors.Join(
-				fmt.Errorf("access token error"),
-				err,
-			)
-		}
+	atoken, err := ep.getAccessTokenFromRequest(r)
+	if err != nil {
+		return pair, err
 	}
 
-	if len(refreshTokenHeader) > 0 {
-		pair.RefreshToken, err = ep.parseToken(refreshTokenHeader)
-		if err != nil {
-			return pair, errors.Join(
-				fmt.Errorf("refresh token error"),
-				err,
-			)
-		}
+	rtoken, err := ep.getRefreshTokenFromRequest(r)
+	if err != nil {
+		return pair, err
 	}
+
+	pair.AccessToken = atoken
+	pair.RefreshToken = rtoken
 
 	return pair, nil
+}
+
+func (ep *IdentityEndpoint[U]) getAccessTokenFromRequest(r router.Request) (*identity.ValidatedToken, error) {
+	accessTokenString := ep.getAccessTokenStringFromRequest(r)
+
+	if len(accessTokenString) == 0 {
+		return nil, nil
+	}
+
+	atoken, err := ep.parseToken(accessTokenString)
+	if err != nil {
+		return atoken, errors.Join(
+			fmt.Errorf("access token error"),
+			err,
+		)
+	}
+
+	return atoken, nil
+}
+
+func (ep *IdentityEndpoint[U]) getRefreshTokenFromRequest(r router.Request) (*identity.ValidatedToken, error) {
+	refreshTokenString := ep.getRefreshTokenStringFromRequest(r)
+
+	if len(refreshTokenString) == 0 {
+		return nil, nil
+	}
+
+	rtoken, err := ep.parseToken(refreshTokenString)
+	if err != nil {
+		return rtoken, errors.Join(
+			fmt.Errorf("access token error"),
+			err,
+		)
+	}
+
+	return rtoken, nil
+}
+
+func (ep *IdentityEndpoint[U]) getAccessTokenStringFromRequest(r router.Request) string {
+	switch ep.Media {
+	case PlainHeadersMedia:
+		return r.Headers().Get(ep.accessTokenKey())
+	default:
+		if c := r.Cookie(ep.accessTokenKey()); c != nil {
+			return c.Value
+		}
+	}
+
+	return ""
+}
+
+func (ep *IdentityEndpoint[U]) getRefreshTokenStringFromRequest(r router.Request) string {
+	switch ep.Media {
+	case PlainHeadersMedia:
+		return r.Headers().Get(ep.refreshTokenKey())
+	default:
+		if c := r.Cookie(ep.refreshTokenKey()); c != nil {
+			return c.Value
+		}
+	}
+
+	return ""
 }
 
 func (ep *IdentityEndpoint[U]) parseToken(tokenStr string) (*identity.ValidatedToken, error) {
@@ -354,20 +423,20 @@ func (ep *IdentityEndpoint[U]) parseToken(tokenStr string) (*identity.ValidatedT
 	}, nil
 }
 
-func (ep *IdentityEndpoint[U]) accessTokenHeaderName() string {
-	if len(ep.AccessTokenHeader) == 0 {
-		return AccessTokenHeader
+func (ep *IdentityEndpoint[U]) accessTokenKey() string {
+	if len(ep.AccessTokenKey) == 0 {
+		return DefaultAccessTokenKey
 	}
 
-	return ep.AccessTokenHeader
+	return ep.AccessTokenKey
 }
 
-func (ep *IdentityEndpoint[U]) refreshTokenHeaderName() string {
-	if len(ep.RefreshTokenHeader) == 0 {
-		return RefreshTokenHeader
+func (ep *IdentityEndpoint[U]) refreshTokenKey() string {
+	if len(ep.RefreshTokenKey) == 0 {
+		return DefaultRefreshTokenKey
 	}
 
-	return ep.RefreshTokenHeader
+	return ep.RefreshTokenKey
 }
 
 func (ep *IdentityEndpoint[U]) log() *slog.Logger {

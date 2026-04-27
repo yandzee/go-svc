@@ -46,8 +46,7 @@ func TestAuthCheckRoute(t *testing.T) {
 				step.ExpectStatus(http.StatusUnauthorized)
 			},
 		},
-	},
-	)
+	})
 }
 
 func TestSigninRoute(t *testing.T) {
@@ -116,10 +115,11 @@ func buildEndpoint(t *testing.T, td *TestDescriptor) *id_http.IdentityEndpoint[T
 	}
 
 	return &id_http.IdentityEndpoint[TestUser]{
-		Provider:           &provider,
-		Log:                nil,
-		AccessTokenHeader:  AccessHeaderName,
-		RefreshTokenHeader: RefreshHeaderName,
-		TokenPrivateKey:    key,
+		Provider:        &provider,
+		Log:             nil,
+		TokenPrivateKey: key,
+		Media:           id_http.PlainHeadersMedia,
+		AccessTokenKey:  AccessHeaderName,
+		RefreshTokenKey: RefreshHeaderName,
 	}
 }

@@ -33,7 +33,7 @@ func (ep *IdentityEndpoint[U]) Guard(
 		result.Options = opts[0]
 	}
 
-	pair, err := ep.tokensFromRequest(rctx.Request)
+	pair, err := ep.getTokensFromRequest(rctx.Request)
 	if err != nil {
 		log.Error("tokensFromRequest failure", "err", err.Error())
 
