@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yandzee/go-svc/identity"
+	id_http "github.com/yandzee/go-svc/identity/http"
 )
 
 type StepsHandle struct {
@@ -18,31 +19,110 @@ type StepsHandle struct {
 
 type Step struct {
 	Request         *http.Request
-	ResponseCheckFn ResponseCheckFn
+	ResponseChekers []ResponseCheckFn
 }
 
 type ResponseCheckFn func(*testing.T, *httptest.ResponseRecorder)
 
-func (sh *StepsHandle) CheckAuth(tokens identity.TokenPair, body any) *Step {
-	step := &Step{
-		Request: sh.Request(http.MethodGet, AuthCheckURL, tokens, body),
-	}
+func (sh *StepsHandle) AddStep() *Step {
+	s := &Step{}
+	sh.steps = append(sh.steps, s)
 
-	sh.steps = append(sh.steps, step)
-	return step
+	return s
 }
 
-func (sh *StepsHandle) Signin(creds identity.Credentials) *Step {
-	step := &Step{
-		Request: sh.Request(http.MethodPost, SigninURL, identity.TokenPair{}, identity.SigninRequest{}),
-	}
+func (s *Step) CheckAuth(tokens identity.TokenPair, body any) *Step {
+	s.Request = s.createRequest(http.MethodGet, AuthCheckURL, tokens, body)
+	return s
+}
 
-	sh.steps = append(sh.steps, step)
-	return step
+func (s *Step) Signin(creds identity.Credentials) *Step {
+	s.Request = s.createRequest(
+		http.MethodPost,
+		SigninURL,
+		identity.TokenPair{},
+		identity.SigninRequest{
+			Credentials: creds,
+		},
+	)
+
+	return s
+}
+
+func (s *Step) Signup(creds identity.Credentials) *Step {
+	s.Request = s.createRequest(
+		http.MethodPost,
+		SignupURL,
+		identity.TokenPair{},
+		identity.SignupRequest{
+			Credentials: creds,
+		},
+	)
+
+	return s
 }
 
 func (s *Step) ExpectStatus(statusCode int) {
-	s.ResponseCheckFn = makeRespChecker(statusCode)
+	s.ResponseChekers = append(s.ResponseChekers, func(t *testing.T, rr *httptest.ResponseRecorder) {
+		if rr.Code == statusCode {
+			return
+		}
+
+		t.Fatalf("RespChecker: expected status %d, but got %d", statusCode, rr.Code)
+	})
+}
+
+func (s *Step) ExpectTokens(media id_http.AuthCredentialsMedia, both bool) {
+	s.ResponseChekers = append(s.ResponseChekers, func(t *testing.T, rr *httptest.ResponseRecorder) {
+		switch media {
+		case id_http.PlainHeadersMedia:
+			h := rr.Result().Header
+
+			at := h.Get(AccessTokenKey)
+			rt := h.Get(RefreshTokenKey)
+
+			if len(at) == 0 {
+				t.Fatalf("response does not have AccessToken plain header, headers: %v", h)
+			}
+
+			if both && len(rt) == 0 {
+				t.Fatalf("response does not have refresh token plain header, headers: %v", h)
+			}
+
+			if !both && len(rt) > 0 {
+				t.Fatalf("response expected not to have refresh token attached, headers: %v", h)
+			}
+		}
+	})
+}
+
+func (s *Step) createRequest(
+	method, url string,
+	tokens identity.TokenPair,
+	body any,
+) *http.Request {
+	bodyBytes, err := json.Marshal(body)
+	if err != nil {
+		panic("makeRequest failed on body marshaling: " + err.Error())
+	}
+
+	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
+	if err != nil {
+		panic("makeRequest failed on creaing new request: " + err.Error())
+	}
+
+	if tokens.AccessToken != nil {
+		req.Header.Add(AccessTokenKey, tokens.AccessToken.JWTString)
+
+		c := tokens.AccessToken.AsCookie(AccessTokenKey)
+		req.AddCookie(&c)
+	}
+
+	if tokens.RefreshToken != nil {
+		req.Header.Add(RefreshTokenKey, tokens.RefreshToken.JWTString)
+	}
+
+	return req
 }
 
 func makeRespChecker(status int) ResponseCheckFn {
@@ -51,35 +131,4 @@ func makeRespChecker(status int) ResponseCheckFn {
 			t.Fatalf("RespChecker: expected status %d, but got %d", status, rr.Code)
 		}
 	}
-}
-
-func (sh *StepsHandle) Request(
-	method, url string,
-	tokens identity.TokenPair,
-	body any,
-) *http.Request {
-	t := sh.t
-
-	bodyBytes, err := json.Marshal(body)
-	if err != nil {
-		t.Fatalf("makeRequest failed on body marshaling: %s", err.Error())
-	}
-
-	req, err := http.NewRequest(method, url, bytes.NewReader(bodyBytes))
-	if err != nil {
-		t.Fatalf("makeRequest failed on creaing new request: %s", err.Error())
-	}
-
-	if tokens.AccessToken != nil {
-		req.Header.Add(AccessHeaderName, tokens.AccessToken.JWTString)
-
-		c := tokens.AccessToken.AsCookie(AccessHeaderName)
-		req.AddCookie(&c)
-	}
-
-	if tokens.RefreshToken != nil {
-		req.Header.Add(RefreshHeaderName, tokens.RefreshToken.JWTString)
-	}
-
-	return req
 }

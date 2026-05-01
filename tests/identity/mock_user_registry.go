@@ -18,6 +18,7 @@ func (tu TestUser) GetId() uuid.UUID {
 }
 
 type MockUserRegistry struct {
+	// NOTE: username -> TestUser mapping
 	Users map[string]*TestUser
 }
 

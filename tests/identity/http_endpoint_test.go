@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/yandzee/go-svc/identity"
 	id_http "github.com/yandzee/go-svc/identity/http"
 	"github.com/yandzee/go-svc/router"
@@ -17,11 +18,19 @@ import (
 )
 
 const (
-	AccessHeaderName  = "X-Test-Access-Token"
-	RefreshHeaderName = "X-Test-Refresh-Token"
+	AccessTokenKey  = "X-Test-Access-Token"
+	RefreshTokenKey = "X-Test-Refresh-Token"
 
 	AuthCheckURL = "/auth"
 	SigninURL    = "/auth/signin"
+	SignupURL    = "/auth/signup"
+
+	// NOTE: This user exists in mock registry, Username2 does not
+	Username1         = "username-1"
+	Username1Password = "password-1"
+
+	Username2         = "username-2"
+	Username2Password = "password-2"
 )
 
 type TestDescriptor struct {
@@ -35,10 +44,10 @@ func TestAuthCheckRoute(t *testing.T) {
 	runTests(t, []TestDescriptor{
 		{
 			Steps: func(h *StepsHandle) {
-				step := h.CheckAuth(identity.TokenPair{}, nil)
+				step := h.AddStep().CheckAuth(identity.TokenPair{}, nil)
 				step.ExpectStatus(http.StatusUnauthorized)
 
-				step = h.CheckAuth(identity.TokenPair{
+				step = h.AddStep().CheckAuth(identity.TokenPair{
 					AccessToken: &identity.Token{
 						JWTString: "not-a-jwt",
 					},
@@ -53,8 +62,22 @@ func TestSigninRoute(t *testing.T) {
 	runTests(t, []TestDescriptor{
 		{
 			Steps: func(h *StepsHandle) {
-				step := h.Signin(nil)
+				step := h.AddStep().Signin(nil)
 				step.ExpectStatus(http.StatusBadRequest)
+			},
+		},
+	})
+}
+
+func TestSignupPlainHeaders(t *testing.T) {
+	runTests(t, []TestDescriptor{
+		{
+			Steps: func(h *StepsHandle) {
+				step := h.AddStep().Signup(identity.Credentials{
+					"username": Username2,
+					"password": Username2Password,
+				})
+				step.ExpectTokens(id_http.PlainHeadersMedia, true)
 			},
 		},
 	})
@@ -75,7 +98,10 @@ func runTests(t *testing.T, tests []TestDescriptor) {
 			resp := httptest.NewRecorder()
 
 			router.ServeHTTP(resp, step.Request)
-			step.ResponseCheckFn(t, resp)
+
+			for _, responseChecker := range step.ResponseChekers {
+				responseChecker(t, resp)
+			}
 		}
 	}
 }
@@ -85,7 +111,7 @@ func buildEndpointRouter(ep *id_http.IdentityEndpoint[TestUser]) http.Handler {
 
 	r.Get(AuthCheckURL, ep.Check())
 	r.Get("/auth/user", ep.CurrentUser())
-	r.Post("/auth/signup", ep.Signup())
+	r.Post(SignupURL, ep.Signup())
 	r.Post(SigninURL, ep.Signin())
 	r.Post("/auth/refresh", ep.Refresh())
 
@@ -99,7 +125,13 @@ func buildEndpoint(t *testing.T, td *TestDescriptor) *id_http.IdentityEndpoint[T
 	}
 
 	inMemRegistry := &MockUserRegistry{
-		Users: map[string]*TestUser{},
+		Users: map[string]*TestUser{
+			Username1: {
+				Id:       uuid.Must(uuid.NewUUID()),
+				Username: Username1,
+				Password: Username1Password,
+			},
+		},
 	}
 
 	for _, usr := range td.Users {
@@ -119,7 +151,7 @@ func buildEndpoint(t *testing.T, td *TestDescriptor) *id_http.IdentityEndpoint[T
 		Log:             nil,
 		TokenPrivateKey: key,
 		Media:           id_http.PlainHeadersMedia,
-		AccessTokenKey:  AccessHeaderName,
-		RefreshTokenKey: RefreshHeaderName,
+		AccessTokenKey:  AccessTokenKey,
+		RefreshTokenKey: RefreshTokenKey,
 	}
 }
